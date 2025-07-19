@@ -1,0 +1,302 @@
+# =============================================================================
+# REGRAS DE ALERTA - MEGAEMU MODERN
+# =============================================================================
+# Definições de alertas para monitoramento da aplicação
+
+groups:
+  # ==========================================================================
+  # ALERTAS DA APLICAÇÃO
+  # ==========================================================================
+  - name: megaemu_application
+    rules:
+      # Aplicação indisponível
+      - alert: MegaEmuApplicationDown
+        expr: up{job="megaemu-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: megaemu-backend
+        annotations:
+          summary: "MegaEmu Backend está indisponível"
+          description: "A aplicação MegaEmu Backend não está respondendo há {{ $value }} minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/application-down"
+
+      # Alto tempo de resposta
+      - alert: MegaEmuHighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="megaemu-backend"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: megaemu-backend
+        annotations:
+          summary: "Alto tempo de resposta na aplicação"
+          description: "95% das requisições estão levando mais de 2 segundos para responder."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-response-time"
+
+      # Alta taxa de erro
+      - alert: MegaEmuHighErrorRate
+        expr: rate(http_requests_total{job="megaemu-backend",status=~"5.."}[5m]) / rate(http_requests_total{job="megaemu-backend"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          service: megaemu-backend
+        annotations:
+          summary: "Alta taxa de erros na aplicação"
+          description: "Mais de 10% das requisições estão retornando erro 5xx nos últimos 5 minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-error-rate"
+
+      # Muitas requisições 4xx
+      - alert: MegaEmuHighClientErrorRate
+        expr: rate(http_requests_total{job="megaemu-backend",status=~"4.."}[5m]) / rate(http_requests_total{job="megaemu-backend"}[5m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: megaemu-backend
+        annotations:
+          summary: "Alta taxa de erros de cliente"
+          description: "Mais de 20% das requisições estão retornando erro 4xx nos últimos 5 minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-client-error-rate"
+
+      # Baixo throughput
+      - alert: MegaEmuLowThroughput
+        expr: rate(http_requests_total{job="megaemu-backend"}[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: info
+          service: megaemu-backend
+        annotations:
+          summary: "Baixo throughput na aplicação"
+          description: "A aplicação está recebendo menos de 0.1 requisições por segundo."
+          runbook_url: "https://docs.megaemu.com/runbooks/low-throughput"
+
+  # ==========================================================================
+  # ALERTAS DO BANCO DE DADOS
+  # ==========================================================================
+  - name: megaemu_database
+    rules:
+      # PostgreSQL indisponível
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL está indisponível"
+          description: "O banco de dados PostgreSQL não está respondendo há {{ $value }} minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/postgresql-down"
+
+      # Muitas conexões ativas
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Muitas conexões ativas no PostgreSQL"
+          description: "PostgreSQL tem {{ $value }} conexões ativas, que está próximo do limite."
+          runbook_url: "https://docs.megaemu.com/runbooks/postgresql-connections"
+
+      # Queries lentas
+      - alert: PostgreSQLSlowQueries
+        expr: pg_stat_activity_max_tx_duration > 300
+        for: 2m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Queries lentas detectadas no PostgreSQL"
+          description: "Há transações rodando há mais de 5 minutos no PostgreSQL."
+          runbook_url: "https://docs.megaemu.com/runbooks/postgresql-slow-queries"
+
+      # Deadlocks
+      - alert: PostgreSQLDeadlocks
+        expr: increase(pg_stat_database_deadlocks[1h]) > 5
+        for: 0m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Deadlocks detectados no PostgreSQL"
+          description: "{{ $value }} deadlocks foram detectados na última hora."
+          runbook_url: "https://docs.megaemu.com/runbooks/postgresql-deadlocks"
+
+  # ==========================================================================
+  # ALERTAS DO REDIS
+  # ==========================================================================
+  - name: megaemu_redis
+    rules:
+      # Redis indisponível
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis está indisponível"
+          description: "O Redis não está respondendo há {{ $value }} minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/redis-down"
+
+      # Alto uso de memória
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Alto uso de memória no Redis"
+          description: "Redis está usando {{ $value | humanizePercentage }} da memória disponível."
+          runbook_url: "https://docs.megaemu.com/runbooks/redis-memory"
+
+      # Muitas chaves expiradas
+      - alert: RedisHighExpiredKeys
+        expr: increase(redis_expired_keys_total[1h]) > 1000
+        for: 0m
+        labels:
+          severity: info
+          service: redis
+        annotations:
+          summary: "Muitas chaves expiraram no Redis"
+          description: "{{ $value }} chaves expiraram na última hora."
+          runbook_url: "https://docs.megaemu.com/runbooks/redis-expired-keys"
+
+  # ==========================================================================
+  # ALERTAS DO SISTEMA
+  # ==========================================================================
+  - name: megaemu_system
+    rules:
+      # Alto uso de CPU
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Alto uso de CPU"
+          description: "CPU está em {{ $value }}% de uso na instância {{ $labels.instance }}."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-cpu"
+
+      # Alto uso de memória
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Alto uso de memória"
+          description: "Memória está em {{ $value | humanizePercentage }} de uso na instância {{ $labels.instance }}."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-memory"
+
+      # Pouco espaço em disco
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Pouco espaço em disco"
+          description: "Apenas {{ $value | humanizePercentage }} de espaço livre no disco {{ $labels.mountpoint }} na instância {{ $labels.instance }}."
+          runbook_url: "https://docs.megaemu.com/runbooks/low-disk-space"
+
+      # Alta carga do sistema
+      - alert: HighSystemLoad
+        expr: node_load15 / count by(instance) (node_cpu_seconds_total{mode="idle"}) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Alta carga do sistema"
+          description: "Carga do sistema está em {{ $value }} na instância {{ $labels.instance }}."
+          runbook_url: "https://docs.megaemu.com/runbooks/high-system-load"
+
+  # ==========================================================================
+  # ALERTAS DO CELERY
+  # ==========================================================================
+  - name: megaemu_celery
+    rules:
+      # Worker indisponível
+      - alert: CeleryWorkerDown
+        expr: up{job="celery"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: celery
+        annotations:
+          summary: "Celery Worker está indisponível"
+          description: "O Celery Worker não está respondendo há {{ $value }} minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/celery-worker-down"
+
+      # Muitas tarefas na fila
+      - alert: CeleryHighQueueSize
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: celery
+        annotations:
+          summary: "Muitas tarefas na fila do Celery"
+          description: "Há {{ $value }} tarefas na fila do Celery."
+          runbook_url: "https://docs.megaemu.com/runbooks/celery-high-queue"
+
+      # Tarefas falhando
+      - alert: CeleryHighFailureRate
+        expr: rate(celery_task_failed_total[5m]) / rate(celery_task_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: celery
+        annotations:
+          summary: "Alta taxa de falhas no Celery"
+          description: "Mais de 10% das tarefas do Celery estão falhando."
+          runbook_url: "https://docs.megaemu.com/runbooks/celery-high-failure-rate"
+
+  # ==========================================================================
+  # ALERTAS DE NEGÓCIO
+  # ==========================================================================
+  - name: megaemu_business
+    rules:
+      # Muitos uploads falhando
+      - alert: HighROMUploadFailureRate
+        expr: rate(megaemu_rom_upload_failed_total[10m]) / rate(megaemu_rom_upload_total[10m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: megaemu-backend
+          component: rom-upload
+        annotations:
+          summary: "Alta taxa de falhas no upload de ROMs"
+          description: "Mais de 20% dos uploads de ROM estão falhando nos últimos 10 minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/rom-upload-failures"
+
+      # Processamento de ROMs lento
+      - alert: SlowROMProcessing
+        expr: histogram_quantile(0.95, rate(megaemu_rom_processing_duration_seconds_bucket[10m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+          service: megaemu-backend
+          component: rom-processing
+        annotations:
+          summary: "Processamento de ROMs está lento"
+          description: "95% dos processamentos de ROM estão levando mais de 5 minutos."
+          runbook_url: "https://docs.megaemu.com/runbooks/slow-rom-processing"
+
+      # Muitas buscas sem resultado
+      - alert: HighSearchNoResultsRate
+        expr: rate(megaemu_search_no_results_total[10m]) / rate(megaemu_search_total[10m]) > 0.5
+        for: 10m
+        labels:
+          severity: info
+          service: megaemu-backend
+          component: search
+        annotations:
+          summary: "Muitas buscas sem resultado"
+          description: "Mais de 50% das buscas não estão retornando resultados."
+          runbook_url: "https://docs.megaemu.com/runbooks/search-no-results"

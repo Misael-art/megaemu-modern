@@ -1,0 +1,294 @@
+# =============================================================================
+# CONFIGURAÇÃO DE PROVISIONAMENTO DE DASHBOARDS - GRAFANA
+# =============================================================================
+# Este arquivo configura o provisionamento automático de dashboards no Grafana
+
+apiVersion: 1
+
+# =============================================================================
+# PROVEDORES DE DASHBOARDS
+# =============================================================================
+
+providers:
+  # Dashboards principais do MegaEmu Modern
+  - name: 'megaemu-dashboards'
+    orgId: 1
+    folder: 'MegaEmu Modern'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true
+    
+    # Configurações de importação
+    folderUid: 'megaemu'
+    folderTitle: 'MegaEmu Modern'
+    
+    # Metadados
+    metadata:
+      description: 'Dashboards do sistema MegaEmu Modern'
+      tags:
+        - megaemu
+        - monitoring
+        - application
+      
+      # Informações de contato
+      contact:
+        name: 'MegaEmu Team'
+        email: 'admin@megaemu.com'
+      
+      # Versão dos dashboards
+      version: '1.0.0'
+      
+      # Data de criação
+      created: '2024-01-01T00:00:00Z'
+      
+      # Última atualização
+      updated: '2024-01-01T00:00:00Z'
+
+  # Dashboards de sistema e infraestrutura
+  - name: 'system-dashboards'
+    orgId: 1
+    folder: 'System & Infrastructure'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/system
+      foldersFromFilesStructure: true
+    
+    # Configurações de importação
+    folderUid: 'system'
+    folderTitle: 'System & Infrastructure'
+    
+    # Metadados
+    metadata:
+      description: 'Dashboards de sistema e infraestrutura'
+      tags:
+        - system
+        - infrastructure
+        - monitoring
+      
+      # Informações de contato
+      contact:
+        name: 'Infrastructure Team'
+        email: 'infra@megaemu.com'
+      
+      # Versão dos dashboards
+      version: '1.0.0'
+
+  # Dashboards de banco de dados
+  - name: 'database-dashboards'
+    orgId: 1
+    folder: 'Database'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/database
+      foldersFromFilesStructure: true
+    
+    # Configurações de importação
+    folderUid: 'database'
+    folderTitle: 'Database'
+    
+    # Metadados
+    metadata:
+      description: 'Dashboards de monitoramento de banco de dados'
+      tags:
+        - database
+        - postgresql
+        - redis
+        - monitoring
+      
+      # Informações de contato
+      contact:
+        name: 'Database Team'
+        email: 'dba@megaemu.com'
+      
+      # Versão dos dashboards
+      version: '1.0.0'
+
+  # Dashboards de aplicação
+  - name: 'application-dashboards'
+    orgId: 1
+    folder: 'Application'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/application
+      foldersFromFilesStructure: true
+    
+    # Configurações de importação
+    folderUid: 'application'
+    folderTitle: 'Application'
+    
+    # Metadados
+    metadata:
+      description: 'Dashboards específicos da aplicação MegaEmu'
+      tags:
+        - application
+        - megaemu
+        - business-metrics
+        - monitoring
+      
+      # Informações de contato
+      contact:
+        name: 'Development Team'
+        email: 'dev@megaemu.com'
+      
+      # Versão dos dashboards
+      version: '1.0.0'
+
+# =============================================================================
+# CONFIGURAÇÕES GLOBAIS
+# =============================================================================
+
+# Configurações de sincronização
+sync:
+  # Intervalo de sincronização em segundos
+  interval: 30
+  
+  # Timeout para operações de sincronização
+  timeout: 60
+  
+  # Retry em caso de falha
+  retries: 3
+  
+  # Delay entre retries
+  retryDelay: 5
+
+# Configurações de logging
+logging:
+  # Nível de log
+  level: 'info'
+  
+  # Formato do log
+  format: 'json'
+  
+  # Incluir timestamp
+  timestamp: true
+  
+  # Incluir stack trace em erros
+  stackTrace: true
+
+# Configurações de cache
+cache:
+  # Habilitar cache
+  enabled: true
+  
+  # TTL do cache em segundos
+  ttl: 300
+  
+  # Tamanho máximo do cache
+  maxSize: 100
+  
+  # Limpar cache automaticamente
+  autoCleanup: true
+
+# Configurações de validação
+validation:
+  # Validar dashboards antes de importar
+  enabled: true
+  
+  # Validar sintaxe JSON
+  validateJson: true
+  
+  # Validar estrutura do dashboard
+  validateStructure: true
+  
+  # Validar queries do Prometheus
+  validateQueries: true
+  
+  # Falhar em caso de erro de validação
+  failOnError: false
+
+# Configurações de backup
+backup:
+  # Habilitar backup automático
+  enabled: true
+  
+  # Diretório de backup
+  directory: '/var/lib/grafana/backups/dashboards'
+  
+  # Manter backups por X dias
+  retentionDays: 30
+  
+  # Compressão dos backups
+  compression: true
+  
+  # Formato do backup
+  format: 'json'
+
+# =============================================================================
+# CONFIGURAÇÕES DE NOTIFICAÇÃO
+# =============================================================================
+
+notifications:
+  # Habilitar notificações
+  enabled: true
+  
+  # Notificar em caso de erro
+  onError: true
+  
+  # Notificar em caso de sucesso
+  onSuccess: false
+  
+  # Webhook para notificações
+  webhook:
+    url: 'http://localhost:8000/api/v1/webhooks/grafana'
+    timeout: 30
+    retries: 3
+  
+  # Email para notificações
+  email:
+    enabled: false
+    to: ['admin@megaemu.com']
+    from: 'grafana@megaemu.com'
+    subject: 'Grafana Dashboard Provisioning'
+
+# =============================================================================
+# CONFIGURAÇÕES DE SEGURANÇA
+# =============================================================================
+
+security:
+  # Validar origem dos arquivos
+  validateOrigin: true
+  
+  # Permitir apenas arquivos JSON
+  allowedExtensions: ['.json']
+  
+  # Tamanho máximo do arquivo em MB
+  maxFileSize: 10
+  
+  # Verificar assinatura dos arquivos
+  verifySignature: false
+  
+  # Chave pública para verificação
+  publicKey: ''
+
+# =============================================================================
+# CONFIGURAÇÕES DE PERFORMANCE
+# =============================================================================
+
+performance:
+  # Número máximo de dashboards processados simultaneamente
+  maxConcurrent: 5
+  
+  # Timeout para processamento de dashboard
+  processingTimeout: 120
+  
+  # Buffer size para leitura de arquivos
+  bufferSize: 8192
+  
+  # Usar cache de sistema de arquivos
+  useFileSystemCache: true
+  
+  # Compressão de dashboards em memória
+  compressInMemory: true

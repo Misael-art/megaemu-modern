@@ -1,0 +1,200 @@
+# =============================================================================
+# CONFIGURAÇÃO PROMETHEUS - MEGAEMU MODERN
+# =============================================================================
+# Configuração para coleta de métricas da aplicação
+
+global:
+  # Intervalo padrão para coleta de métricas
+  scrape_interval: 15s
+  
+  # Intervalo para avaliação de regras
+  evaluation_interval: 15s
+  
+  # Labels externos adicionados a todas as métricas
+  external_labels:
+    monitor: 'megaemu-monitor'
+    environment: 'development'
+
+# Configuração de regras de alerta
+rule_files:
+  - "rules/*.yml"
+
+# Configuração de alertmanager (se necessário)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# =============================================================================
+# JOBS DE COLETA DE MÉTRICAS
+# =============================================================================
+
+scrape_configs:
+  # Métricas do próprio Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Métricas da aplicação MegaEmu Modern
+  - job_name: 'megaemu-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+    
+    # Labels adicionais
+    labels:
+      service: 'megaemu-backend'
+      component: 'api'
+    
+    # Configurações específicas
+    honor_labels: true
+    honor_timestamps: true
+
+  # Métricas do PostgreSQL (se exportador estiver disponível)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+    labels:
+      service: 'postgresql'
+      component: 'database'
+    
+    # Apenas se o exportador estiver configurado
+    honor_labels: true
+
+  # Métricas do Redis (se exportador estiver disponível)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+    labels:
+      service: 'redis'
+      component: 'cache'
+    
+    honor_labels: true
+
+  # Métricas do sistema (Node Exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+    labels:
+      service: 'system'
+      component: 'host'
+    
+    honor_labels: true
+
+  # Métricas do Docker (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+    labels:
+      service: 'docker'
+      component: 'containers'
+    
+    honor_labels: true
+
+  # Métricas do Celery (se exportador estiver disponível)
+  - job_name: 'celery'
+    static_configs:
+      - targets: ['celery-exporter:9540']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+    labels:
+      service: 'celery'
+      component: 'worker'
+    
+    honor_labels: true
+
+# =============================================================================
+# CONFIGURAÇÕES AVANÇADAS
+# =============================================================================
+
+# Configurações de armazenamento
+storage:
+  tsdb:
+    # Retenção de dados (padrão: 15 dias)
+    retention.time: 30d
+    
+    # Tamanho máximo do banco de dados
+    retention.size: 10GB
+    
+    # Configurações de compactação
+    min-block-duration: 2h
+    max-block-duration: 25h
+    
+    # Configurações de WAL
+    wal-compression: true
+
+# Configurações de remote write (para enviar dados para outros sistemas)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint/api/v1/write"
+#     headers:
+#       Authorization: "Bearer <token>"
+
+# Configurações de remote read (para ler dados de outros sistemas)
+# remote_read:
+#   - url: "https://prometheus-remote-read-endpoint/api/v1/read"
+#     headers:
+#       Authorization: "Bearer <token>"
+
+# =============================================================================
+# CONFIGURAÇÕES DE DESCOBERTA DE SERVIÇOS
+# =============================================================================
+
+# Descoberta automática via Docker (se necessário)
+# scrape_configs:
+#   - job_name: 'docker-services'
+#     docker_sd_configs:
+#       - host: unix:///var/run/docker.sock
+#         refresh_interval: 30s
+#     
+#     relabel_configs:
+#       - source_labels: [__meta_docker_container_label_prometheus_job]
+#         target_label: __tmp_prometheus_job_name
+#       
+#       - source_labels: [__tmp_prometheus_job_name]
+#         regex: .+
+#         target_label: job
+#       
+#       - source_labels: [__meta_docker_container_label_prometheus_port]
+#         regex: .+
+#         target_label: __address__
+#         replacement: '${1}'
+
+# Descoberta via Kubernetes (se necessário)
+# scrape_configs:
+#   - job_name: 'kubernetes-pods'
+#     kubernetes_sd_configs:
+#       - role: pod
+#     
+#     relabel_configs:
+#       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+#         action: keep
+#         regex: true
+#       
+#       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+#         action: replace
+#         target_label: __metrics_path__
+#         regex: (.+)
+#       
+#       - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+#         action: replace
+#         regex: ([^:]+)(?::\d+)?;(\d+)
+#         replacement: $1:$2
+#         target_label: __address__

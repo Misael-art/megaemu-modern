@@ -1,0 +1,304 @@
+# =============================================================================
+# DOCKER COMPOSE - MEGAEMU MODERN
+# =============================================================================
+# Orquestração completa dos serviços para desenvolvimento e produção
+
+#version: '3.8'
+
+services:
+  # ===========================================================================
+  # BANCO DE DADOS POSTGRESQL
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: megaemu_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: megaemu_modern
+      POSTGRES_USER: megaemu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-megaemu_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - megaemu_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U megaemu -d megaemu_modern"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # REDIS PARA CACHE E SESSÕES
+  # ===========================================================================
+  redis:
+    image: redis:7.4-alpine
+    container_name: megaemu_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+      - ./backend/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - megaemu_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ===========================================================================
+  # BACKEND API
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-application}
+    container_name: megaemu_backend
+    restart: unless-stopped
+    environment:
+      # Configurações gerais
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      
+      # Banco de dados
+      DATABASE_URL: postgresql+asyncpg://megaemu:${POSTGRES_PASSWORD:-megaemu_password}@postgres:5432/megaemu_modern
+      
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/0
+      
+      # Segurança
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-change-in-production}
+      
+      # Configurações de rede
+      HOST: 0.0.0.0
+      PORT: 8000
+      WORKERS: ${WORKERS:-1}
+      
+      # CORS
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000"]'
+      
+      # Serviços externos
+      IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
+      IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      MOBYGAMES_API_KEY: ${MOBYGAMES_API_KEY:-}
+    volumes:
+      # Dados persistentes
+      - roms_data:/app/data/roms
+      - covers_data:/app/data/covers
+      - screenshots_data:/app/data/screenshots
+      - bios_data:/app/data/bios
+      - saves_data:/app/data/saves
+      - states_data:/app/data/states
+      - temp_data:/app/data/temp
+      - logs_data:/app/logs
+      - backups_data:/app/backups
+      
+      # Configurações (apenas desenvolvimento)
+      - ./backend/app:/app/app:ro
+      - ./backend/.env:/app/.env:ro
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - megaemu_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================================================
+  # WORKER CELERY PARA TAREFAS ASSÍNCRONAS
+  # ===========================================================================
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-application}
+    container_name: megaemu_worker
+    restart: unless-stopped
+    command: celery -A app.core.celery worker --loglevel=info --concurrency=2
+    environment:
+      # Configurações gerais
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Banco de dados
+      DATABASE_URL: postgresql+asyncpg://megaemu:${POSTGRES_PASSWORD:-megaemu_password}@postgres:5432/megaemu_modern
+      
+      # Redis/Celery
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+      
+      # Segurança
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-change-in-production}
+    volumes:
+      # Dados compartilhados com backend
+      - roms_data:/app/data/roms
+      - covers_data:/app/data/covers
+      - screenshots_data:/app/data/screenshots
+      - temp_data:/app/data/temp
+      - logs_data:/app/logs
+    networks:
+      - megaemu_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ===========================================================================
+  # CELERY BEAT PARA TAREFAS AGENDADAS
+  # ===========================================================================
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-application}
+    container_name: megaemu_scheduler
+    restart: unless-stopped
+    command: celery -A app.core.celery beat --loglevel=info
+    environment:
+      # Configurações gerais
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Banco de dados
+      DATABASE_URL: postgresql+asyncpg://megaemu:${POSTGRES_PASSWORD:-megaemu_password}@postgres:5432/megaemu_modern
+      
+      # Redis/Celery
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+      
+      # Segurança
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-change-in-production}
+    volumes:
+      - logs_data:/app/logs
+    networks:
+      - megaemu_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ===========================================================================
+  # FLOWER PARA MONITORAMENTO CELERY (OPCIONAL)
+  # ===========================================================================
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-application}
+    container_name: megaemu_flower
+    restart: unless-stopped
+    command: celery -A app.core.celery flower --port=5555
+    environment:
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/1
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    networks:
+      - megaemu_network
+    depends_on:
+      - redis
+    profiles:
+      - monitoring
+
+  # ===========================================================================
+  # PROMETHEUS PARA MÉTRICAS (OPCIONAL)
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: megaemu_prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - megaemu_network
+    profiles:
+      - monitoring
+
+  # ===========================================================================
+  # GRAFANA PARA DASHBOARDS (OPCIONAL)
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: megaemu_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    networks:
+      - megaemu_network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# =============================================================================
+# VOLUMES PERSISTENTES
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  roms_data:
+    driver: local
+  covers_data:
+    driver: local
+  screenshots_data:
+    driver: local
+  bios_data:
+    driver: local
+  saves_data:
+    driver: local
+  states_data:
+    driver: local
+  temp_data:
+    driver: local
+  logs_data:
+    driver: local
+  backups_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# =============================================================================
+# REDES
+# =============================================================================
+networks:
+  megaemu_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

@@ -1,0 +1,384 @@
+# =============================================================================
+# CONFIGURAÇÃO DE DATASOURCES - GRAFANA
+# =============================================================================
+# Este arquivo configura os datasources do Grafana automaticamente
+
+apiVersion: 1
+
+# =============================================================================
+# DATASOURCES
+# =============================================================================
+
+datasources:
+  # Prometheus - Datasource principal
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    
+    # Configurações básicas
+    basicAuth: false
+    basicAuthUser: ''
+    basicAuthPassword: ''
+    withCredentials: false
+    
+    # Configurações JSON
+    jsonData:
+      # Timeout para queries
+      timeInterval: '15s'
+      queryTimeout: '60s'
+      
+      # Configurações HTTP
+      httpMethod: 'POST'
+      keepCookies: []
+      
+      # Configurações de cache
+      cacheLevel: 'High'
+      
+      # Configurações de exemplars
+      exemplarTraceIdDestinations:
+        - name: 'trace_id'
+          datasourceUid: 'jaeger'
+          url: 'http://jaeger:16686/trace/${__value.raw}'
+      
+      # Configurações de alertas
+      manageAlerts: true
+      prometheusType: 'Prometheus'
+      prometheusVersion: '2.40.0'
+      
+      # Configurações de incremento
+      incrementalQuerying: true
+      incrementalQueryOverlapWindow: '10m'
+      
+      # Configurações de custom query parameters
+      customQueryParameters: ''
+      
+      # Configurações de TLS
+      tlsSkipVerify: false
+      tlsAuth: false
+      tlsAuthWithCACert: false
+      
+      # Configurações de servidor
+      serverName: 'prometheus'
+      
+    # Configurações seguras (senhas, tokens, etc.)
+    secureJsonData: {}
+    
+    # Configurações de edição
+    editable: true
+    
+    # Versão
+    version: 1
+    
+    # UID único
+    uid: 'prometheus'
+    
+    # Organização
+    orgId: 1
+
+  # Loki - Para logs (opcional)
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    
+    # Configurações básicas
+    basicAuth: false
+    basicAuthUser: ''
+    basicAuthPassword: ''
+    withCredentials: false
+    
+    # Configurações JSON
+    jsonData:
+      # Timeout para queries
+      timeout: '60s'
+      
+      # Configurações HTTP
+      httpMethod: 'GET'
+      
+      # Configurações de logs
+      maxLines: 1000
+      
+      # Configurações de derived fields
+      derivedFields:
+        - name: 'TraceID'
+          matcherRegex: 'trace_id=(\\w+)'
+          url: 'http://jaeger:16686/trace/${__value.raw}'
+          datasourceUid: 'jaeger'
+        - name: 'RequestID'
+          matcherRegex: 'request_id=(\\w+)'
+          url: ''
+          datasourceUid: ''
+      
+      # Configurações de alertas
+      manageAlerts: false
+    
+    # Configurações seguras
+    secureJsonData: {}
+    
+    # Configurações de edição
+    editable: true
+    
+    # Versão
+    version: 1
+    
+    # UID único
+    uid: 'loki'
+    
+    # Organização
+    orgId: 1
+
+  # Jaeger - Para tracing (opcional)
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    
+    # Configurações básicas
+    basicAuth: false
+    basicAuthUser: ''
+    basicAuthPassword: ''
+    withCredentials: false
+    
+    # Configurações JSON
+    jsonData:
+      # Configurações de trace
+      tracesToLogs:
+        datasourceUid: 'loki'
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [{'key': 'service.name', 'value': 'service'}]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: false
+        filterBySpanID: false
+      
+      # Configurações de métricas
+      tracesToMetrics:
+        datasourceUid: 'prometheus'
+        tags: [{'key': 'service.name', 'value': 'service'}, {'key': 'job'}]
+        queries:
+          - name: 'Sample query'
+            query: 'sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m]))'
+      
+      # Configurações de node graph
+      nodeGraph:
+        enabled: true
+      
+      # Configurações de span bar
+      spanBar:
+        type: 'Tag'
+        tag: 'http.status_code'
+    
+    # Configurações seguras
+    secureJsonData: {}
+    
+    # Configurações de edição
+    editable: true
+    
+    # Versão
+    version: 1
+    
+    # UID único
+    uid: 'jaeger'
+    
+    # Organização
+    orgId: 1
+
+  # PostgreSQL - Para queries diretas no banco (opcional)
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: megaemu_modern
+    user: ${POSTGRES_USER}
+    isDefault: false
+    
+    # Configurações básicas
+    basicAuth: false
+    basicAuthUser: ''
+    basicAuthPassword: ''
+    withCredentials: false
+    
+    # Configurações JSON
+    jsonData:
+      # Configurações de conexão
+      sslmode: 'disable'
+      maxOpenConns: 10
+      maxIdleConns: 2
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      
+      # Configurações de query
+      postgresVersion: 1300
+      timescaledb: false
+      
+      # Configurações de timeout
+      queryTimeout: '60s'
+      
+      # Configurações de timezone
+      timezone: 'UTC'
+    
+    # Configurações seguras
+    secureJsonData:
+      password: '${POSTGRES_PASSWORD}'
+    
+    # Configurações de edição
+    editable: true
+    
+    # Versão
+    version: 1
+    
+    # UID único
+    uid: 'postgresql'
+    
+    # Organização
+    orgId: 1
+
+  # Redis - Para métricas do Redis (opcional)
+  - name: Redis
+    type: redis-datasource
+    access: proxy
+    url: redis://redis:6379
+    isDefault: false
+    
+    # Configurações básicas
+    basicAuth: false
+    basicAuthUser: ''
+    basicAuthPassword: ''
+    withCredentials: false
+    
+    # Configurações JSON
+    jsonData:
+      # Configurações de conexão
+      client: 'standalone'
+      poolSize: 5
+      timeout: 10
+      pingInterval: 0
+      pipelineWindow: 0
+      
+      # Configurações de TLS
+      tlsAuth: false
+      tlsSkipVerify: true
+      
+      # Configurações de ACL
+      acl: false
+    
+    # Configurações seguras
+    secureJsonData:
+      password: '${REDIS_PASSWORD}'
+    
+    # Configurações de edição
+    editable: true
+    
+    # Versão
+    version: 1
+    
+    # UID único
+    uid: 'redis'
+    
+    # Organização
+    orgId: 1
+
+# =============================================================================
+# CONFIGURAÇÕES GLOBAIS DE DATASOURCES
+# =============================================================================
+
+# Configurações de deletar datasources não listados
+deleteDatasources:
+  - name: 'TestData DB'
+    orgId: 1
+
+# =============================================================================
+# CONFIGURAÇÕES DE NOTIFICAÇÃO
+# =============================================================================
+
+# Configurações para notificações de mudanças em datasources
+notifications:
+  # Habilitar notificações
+  enabled: true
+  
+  # Webhook para notificações
+  webhook:
+    url: 'http://backend:8000/api/v1/webhooks/grafana/datasources'
+    method: 'POST'
+    headers:
+      'Content-Type': 'application/json'
+      'Authorization': 'Bearer ${GRAFANA_WEBHOOK_TOKEN}'
+    
+    # Payload da notificação
+    payload: |
+      {
+        "event": "datasource_changed",
+        "timestamp": "{{ .Timestamp }}",
+        "datasource": {
+          "name": "{{ .Name }}",
+          "type": "{{ .Type }}",
+          "uid": "{{ .UID }}",
+          "url": "{{ .URL }}"
+        },
+        "action": "{{ .Action }}",
+        "user": "{{ .User }}"
+      }
+
+# =============================================================================
+# CONFIGURAÇÕES DE VALIDAÇÃO
+# =============================================================================
+
+validation:
+  # Validar conectividade dos datasources
+  testConnections: true
+  
+  # Timeout para teste de conexão
+  connectionTimeout: 30
+  
+  # Falhar se não conseguir conectar
+  failOnConnectionError: false
+  
+  # Validar queries de exemplo
+  testQueries: true
+  
+  # Queries de teste por tipo de datasource
+  testQueriesByType:
+    prometheus: 'up'
+    loki: '{job="grafana"}'
+    postgres: 'SELECT 1'
+    redis: 'INFO server'
+
+# =============================================================================
+# CONFIGURAÇÕES DE MONITORAMENTO
+# =============================================================================
+
+monitoring:
+  # Habilitar monitoramento de datasources
+  enabled: true
+  
+  # Intervalo de verificação de saúde
+  healthCheckInterval: '60s'
+  
+  # Métricas a serem coletadas
+  metrics:
+    - 'datasource_health'
+    - 'datasource_response_time'
+    - 'datasource_query_count'
+    - 'datasource_error_rate'
+  
+  # Alertas para datasources
+  alerts:
+    - name: 'Datasource Down'
+      condition: 'datasource_health == 0'
+      severity: 'critical'
+      message: 'Datasource {{ .Name }} is down'
+    
+    - name: 'High Response Time'
+      condition: 'datasource_response_time > 5000'
+      severity: 'warning'
+      message: 'Datasource {{ .Name }} has high response time: {{ .Value }}ms'
+    
+    - name: 'High Error Rate'
+      condition: 'datasource_error_rate > 0.1'
+      severity: 'warning'
+      message: 'Datasource {{ .Name }} has high error rate: {{ .Value }}%'
