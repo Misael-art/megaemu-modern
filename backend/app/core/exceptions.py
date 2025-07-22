@@ -248,3 +248,54 @@ class ConfigurationError(MegaEmuException):
             status_code=500,
             details=details
         )
+
+
+class DatabaseConnectionError(DatabaseError):
+    """Erro específico de conexão com banco de dados."""
+    
+    def __init__(self, message: str = "Falha na conexão com o banco de dados"):
+        super().__init__(
+            message=message,
+            error_code="database_connection_error",
+            status_code=503
+        )
+
+class DatabaseQueryError(DatabaseError):
+    """Erro específico em queries de banco de dados."""
+    
+    def __init__(self, message: str = "Erro na execução da query"):
+        super().__init__(
+            message=message,
+            error_code="database_query_error",
+            status_code=500
+        )
+
+class FileNotFoundErrorCustom(FileError):
+    """Erro quando arquivo não é encontrado."""
+    
+    def __init__(self, message: str = "Arquivo não encontrado"):
+        super().__init__(
+            message=message,
+            error_code="file_not_found",
+            status_code=404
+        )
+
+class FilePermissionError(FileError):
+    """Erro de permissão em arquivos."""
+    
+    def __init__(self, message: str = "Permissão negada para o arquivo"):
+        super().__init__(
+            message=message,
+            error_code="file_permission_error",
+            status_code=403
+        )
+
+class ROMImportError(MegaEmuException):
+    """Erro específico em importação de ROMs."""
+    
+    def __init__(self, message: str = "Erro na importação de ROM"):
+        super().__init__(
+            message=message,
+            error_code="rom_import_error",
+            status_code=400
+        )

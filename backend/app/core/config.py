@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
     
+    # Database timeouts
+    DATABASE_STATEMENT_TIMEOUT: int = 30  # segundos
+    
     # Redis
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

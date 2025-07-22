@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator, ValidationInfo
 
+from app.schemas.base import BaseSchema
+from app.schemas.validators import CommonValidators
+
 
 class Token(BaseModel):
     """Schema para resposta de token de autenticação."""
@@ -29,24 +32,32 @@ class UserLogin(BaseModel):
 
 class UserRegister(BaseModel):
     """Schema para registro de usuário."""
-    email: EmailStr = Field(..., description="Email do usuário")
-    username: str = Field(..., min_length=3, max_length=50, description="Nome de usuário")
-    full_name: str = Field(..., min_length=2, max_length=100, description="Nome completo")
-    password: str = Field(..., min_length=8, description="Senha do usuário")
+    email: EmailStr = Field(..., description="Email do usuário", pattern=r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$')
+    username: str = Field(..., min_length=3, max_length=50, description="Nome de usuário", pattern="^[a-zA-Z0-9_-]+$")
+    full_name: str = Field(..., min_length=2, max_length=100, description="Nome completo", pattern="^[a-zA-ZÀ-ÿ ]+$")
+    password: str = Field(..., min_length=8, max_length=128, description="Senha do usuário")
     confirm_password: str = Field(..., description="Confirmação da senha")
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return CommonValidators.validate_email_format(v)
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        return CommonValidators.validate_username(v)
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        return CommonValidators.validate_password_strength(v)
 
     @field_validator('confirm_password')
     def passwords_match(cls, v, info: ValidationInfo):
         """Valida se as senhas coincidem."""
         if 'password' in info.data and v != info.data['password']:
             raise ValueError('As senhas não coincidem')
-        return v
-
-    @field_validator('username')
-    def username_alphanumeric(cls, v):
-        """Valida se o username contém apenas caracteres alfanuméricos e underscore."""
-        if not v.replace('_', '').isalnum():
-            raise ValueError('Nome de usuário deve conter apenas letras, números e underscore')
         return v
 
 

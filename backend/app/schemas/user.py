@@ -12,6 +12,7 @@ from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.models.user import UserRole, UserStatus
 from app.schemas.base import BaseEntitySchema, BaseSchema
+from app.schemas.validators import CommonValidators
 
 
 class UserBase(BaseSchema):
@@ -92,12 +93,16 @@ class UserCreate(UserBase):
         has_upper = any(c.isupper() for c in v)
         has_lower = any(c.islower() for c in v)
         has_digit = any(c.isdigit() for c in v)
+        has_special = any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?/~`' for c in v)
         
         if not (has_upper and has_lower and has_digit):
             raise ValueError(
                 'Senha deve conter pelo menos uma letra maiúscula, '
                 'uma minúscula e um número'
             )
+        
+        if not has_special:
+            raise ValueError('Senha deve conter pelo menos um caractere especial')
         
         return v
     

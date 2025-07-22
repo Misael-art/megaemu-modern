@@ -13,6 +13,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from loguru import logger
+from prometheus_client import Histogram, Counter  # Adicionar imports para métricas
 
 from app.core.config import settings
 from app.core.logging import log_request, log_security_event
@@ -278,13 +279,36 @@ class TimingMiddleware(BaseHTTPMiddleware):
     para monitoramento de performance.
     """
     
+    request_duration_histogram = Histogram(
+        'http_request_duration_seconds',
+        'Duração das requisições HTTP em segundos',
+        ['method', 'path', 'status_code']
+    )
+    request_total = Counter(
+        'http_requests_total',
+        'Total de requisições HTTP',
+        ['method', 'path', 'status_code']
+    )
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Mede tempo de processamento da requisição."""
         start_time = time.perf_counter()
         
         response = await call_next(request)
         
         process_time = time.perf_counter() - start_time
+        status_code = str(response.status_code)
+        
+        # Observar métricas Prometheus
+        self.request_duration_histogram.labels(
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code
+        ).observe(process_time)
+        self.request_total.labels(
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code
+        ).inc()
         
         if hasattr(response, "headers"):
             response.headers["X-Process-Time"] = str(round(process_time * 1000, 2))

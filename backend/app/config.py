@@ -95,6 +95,10 @@ class Settings(BaseSettings):
     TASK_RETRY_DELAY_SECONDS: int = 60
     TASK_CLEANUP_HOURS: int = 24
     
+    # Configurações de retry para banco de dados
+    DATABASE_RETRY_ATTEMPTS: int = 3
+    DATABASE_RETRY_DELAY_SECONDS: int = 5
+    
     # Configurações de cache
     CACHE_ENABLED: bool = True
     CACHE_DEFAULT_TTL: int = 3600
@@ -118,6 +122,11 @@ class Settings(BaseSettings):
     BACKUP_SCHEDULE: str = "0 2 * * *"  # Diário às 2h
     BACKUP_RETENTION_DAYS: int = 30
     BACKUP_COMPRESS: bool = True
+    CLOUD_BACKUP_ENABLED: bool = False
+    AWS_S3_BUCKET: Optional[str] = None
+    AWS_S3_REGION: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
     
     # Configurações de monitoramento
     MONITORING_ENABLED: bool = True

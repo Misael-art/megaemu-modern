@@ -18,6 +18,11 @@ APP_DIR="${APP_DIR:-/app}"
 DATA_DIR="${DATA_DIR:-/data}"
 LOGS_DIR="${LOGS_DIR:-/var/log/megaemu}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/megaemu}"
+CLOUD_BACKUP_ENABLED="${CLOUD_BACKUP_ENABLED:-false}"
+AWS_S3_BUCKET="${AWS_S3_BUCKET:-}"
+AWS_S3_REGION="${AWS_S3_REGION:-us-east-1}"
+AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
+AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
 
 # Configurações do banco de dados
 DB_HOST="${POSTGRES_HOST:-postgres}"
@@ -128,7 +133,24 @@ create_backup_dir() {
 # FUNÇÕES DE BACKUP
 # =============================================================================
 
-# Backup do PostgreSQL
+# Adicionar suporte para backup incremental
+INCREMENTAL=false
+LAST_TIME=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --incremental)
+            INCREMENTAL=true
+            LAST_TIME="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Modificar backup_postgresql para suportar incremental
 backup_postgresql() {
     log "Iniciando backup do PostgreSQL..."
     
@@ -139,36 +161,50 @@ backup_postgresql() {
         error "Não foi possível conectar ao PostgreSQL"
     fi
     
-    # Realizar backup
-    PGPASSWORD="$DB_PASSWORD" pg_dump \
-        -h "$DB_HOST" \
-        -p "$DB_PORT" \
-        -U "$DB_USER" \
-        -d "$DB_NAME" \
-        --verbose \
-        --no-password \
-        --format=custom \
-        --compress="$COMPRESSION_LEVEL" \
-        --file="$db_backup_file" || error "Falha no backup do PostgreSQL"
+    if $INCREMENTAL; then
+        log "Modo incremental ativado desde $LAST_TIME"
+        # Lógica incremental: dump apenas tabelas modificadas (exemplo simplificado, ajustar conforme schema)
+        PGPASSWORD="$DB_PASSWORD" pg_dump \
+            -h "$DB_HOST" \
+            -p "$DB_PORT" \
+            -U "$DB_USER" \
+            -d "$DB_NAME" \
+            --verbose \
+            --no-password \
+            --format=custom \
+            --compress="$COMPRESSION_LEVEL" \
+            --table='public.games' --where="updated_at > '$LAST_TIME'" \
+            --file="$db_backup_file" || error "Falha no backup incremental do PostgreSQL"
+    else
+        # Backup completo existente
+        PGPASSWORD="$DB_PASSWORD" pg_dump \
+            -h "$DB_HOST" \
+            -p "$DB_PORT" \
+            -U "$DB_USER" \
+            -d "$DB_NAME" \
+            --verbose \
+            --no-password \
+            --format=custom \
+            --compress="$COMPRESSION_LEVEL" \
+            --file="$db_backup_file" || error "Falha no backup do PostgreSQL"
+    fi
     
-    # Verificar integridade
+    # Verificar integridade e checksum (existente)
     if [[ ! -f "$db_backup_file" ]] || [[ ! -s "$db_backup_file" ]]; then
         error "Arquivo de backup do PostgreSQL está vazio ou não existe"
     fi
-    
-    # Gerar checksum
     sha256sum "$db_backup_file" > "${db_backup_file}.sha256"
     
     log "Backup do PostgreSQL concluído: $(du -h "$db_backup_file" | cut -f1)"
 }
 
-# Backup do Redis
+# Modificar backup_redis para suportar incremental
 backup_redis() {
     log "Iniciando backup do Redis..."
     
     local redis_backup_file="${BACKUP_PATH}/redis/redis_${TIMESTAMP}.rdb"
     
-    # Verificar conectividade
+    # Configuração redis_cmd existente
     if [[ -n "$REDIS_PASSWORD" ]]; then
         redis_cmd="redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD"
     else
@@ -179,28 +215,24 @@ backup_redis() {
         error "Não foi possível conectar ao Redis"
     fi
     
-    # Forçar save
-    $redis_cmd BGSAVE || error "Falha ao executar BGSAVE no Redis"
-    
-    # Aguardar conclusão do save
-    while [[ "$($redis_cmd LASTSAVE)" == "$($redis_cmd LASTSAVE)" ]]; do
-        sleep 1
-    done
-    
-    # Copiar arquivo RDB
-    if [[ -n "$REDIS_PASSWORD" ]]; then
+    if $INCREMENTAL; then
+        log "Modo incremental ativado desde $LAST_TIME"
+        # Lógica incremental para Redis: exportar chaves modificadas (exemplo usando AOF ou scan)
         $redis_cmd --rdb "$redis_backup_file" || error "Falha ao copiar RDB do Redis"
+        # Para verdadeiro incremental, talvez usar AOF append only
     else
+        # Backup completo existente
+        $redis_cmd BGSAVE || error "Falha ao executar BGSAVE no Redis"
+        while [[ "$($redis_cmd LASTSAVE)" == "$($redis_cmd LASTSAVE)" ]]; do
+            sleep 1
+        done
         $redis_cmd --rdb "$redis_backup_file" || error "Falha ao copiar RDB do Redis"
     fi
     
-    # Gerar checksum
+    # Checksum existente
     if [[ -f "$redis_backup_file" ]]; then
         sha256sum "$redis_backup_file" > "${redis_backup_file}.sha256"
         log "Backup do Redis concluído: $(du -h "$redis_backup_file" | cut -f1)"
-    else
-        log "WARNING: Arquivo de backup do Redis não encontrado, criando backup vazio"
-        touch "$redis_backup_file"
     fi
 }
 
@@ -299,6 +331,24 @@ backup_data() {
     else
         log "WARNING: Diretório de dados não encontrado: $DATA_DIR"
         touch "$data_backup_file"
+    fi
+}
+
+# Função para upload para nuvem
+upload_to_cloud() {
+    local final_backup="$1"
+    if [[ "$CLOUD_BACKUP_ENABLED" == "true" ]] && [[ -n "$AWS_S3_BUCKET" ]] && [[ -n "$AWS_S3_REGION" ]]; then
+        log "Iniciando upload para AWS S3..."
+        if ! command -v aws >/dev/null 2>&1; then
+            error "AWS CLI não encontrada. Instale para habilitar backup na nuvem."
+        fi
+        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+        export AWS_DEFAULT_REGION="$AWS_S3_REGION"
+        aws s3 cp "$final_backup" "s3://$AWS_S3_BUCKET/backups/$(basename "$final_backup")" || error "Falha no upload para S3"
+        log "Upload para S3 concluído com sucesso"
+    else
+        log "Backup na nuvem desabilitado ou não configurado"
     fi
 }
 
@@ -427,6 +477,7 @@ main() {
     # Finalizar
     generate_manifest
     compress_backup
+    upload_to_cloud "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
     cleanup_old_backups
     
     log "=== BACKUP CONCLUÍDO COM SUCESSO ==="

@@ -37,6 +37,7 @@ from app.schemas.user import UserResponse, UserCreate
 from app.services.user import UserService
 from app.utils.email import send_email
 from app.utils.validation_utils import validate_email_address, validate_password_strength
+from loguru import logger
 
 router = APIRouter()
 
@@ -136,22 +137,13 @@ async def register(
     user_data: UserRegister,
     db: AsyncSession = Depends(get_db)
 ):
-    """Registra novo usuário.
-    
-    Args:
-        user_data: Dados do usuário para registro
-        db: Sessão do banco de dados
-        
-    Returns:
-        UserResponse: Dados do usuário criado
-        
-    Raises:
-        HTTPException: Se dados inválidos ou usuário já existe
-    """
+    print("[DEBUG] Iniciando registro de usuário: " + user_data.email)
     user_service = UserService(db)
+    print("[DEBUG] UserService instanciado")
     
     # Validações
     if not validate_email_address(user_data.email):
+        print("[DEBUG] Email inválido")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email inválido"
@@ -159,6 +151,7 @@ async def register(
     
     password_validation = validate_password_strength(user_data.password)
     if not password_validation["valid"]:
+        print("[DEBUG] Senha inválida")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Senha inválida: {', '.join(password_validation['errors'])}"
@@ -166,6 +159,7 @@ async def register(
     
     # Verifica se usuário já existe
     existing_user = await user_service.get_by_email(db, email=user_data.email)
+    print(f"[DEBUG] Verificado email existente: {existing_user is not None}")
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -173,6 +167,7 @@ async def register(
         )
     
     existing_username = await user_service.get_by_username(db, username=user_data.username)
+    print(f"[DEBUG] Verificado username existente: {existing_username is not None}")
     if existing_username:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -189,17 +184,19 @@ async def register(
     )
     
     user = await user_service.create_user(db, user_in=user_create_data)
-    
-    # Envia email de boas-vindas (opcional)
+    print(f"[DEBUG] Usuário criado com ID: {user.id if user else 'None'}")
     if settings.EMAILS_ENABLED:
+        print("[DEBUG] Enviando email de boas-vindas")
         try:
             subject = "Bem-vindo ao MegaEmu"
             body = f"Olá {user.full_name or user.username},\n\nBem-vindo ao MegaEmu! Sua conta foi criada com sucesso."
             html_body = f"""<html><body><h1>Bem-vindo ao MegaEmu</h1><p>Olá {user.full_name or user.username},</p><p>Sua conta foi criada com sucesso.</p><p>Atenciosamente,<br>Equipe MegaEmu</p></body></html>"""
             await send_email(to_email=user.email, subject=subject, body=body, html_body=html_body)
         except Exception as e:
-            print(f"Erro ao enviar email de boas-vindas: {e}")
-    
+            print("[DEBUG] Email enviado com sucesso")
+        except Exception as e:
+            print(f"[ERROR] Erro ao enviar email: {str(e)}")
+    print("[DEBUG] Retornando resposta")
     return UserResponse.model_validate(user)
 
 

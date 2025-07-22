@@ -12,7 +12,7 @@ Uma modernização completa do MegaEmu DataBase ROMs com arquitetura web moderna
 - **Celery + Redis** para processamento assíncrono de tarefas
 - **Alembic** para migrações de banco de dados
 - **Playwright** para web scraping moderno
-- **JWT** para autenticação e autorização
+- **JWT** para autenticação e autorização com RBAC
 - **Rate limiting** e validação de entrada
 
 ### Frontend (React)
@@ -28,7 +28,7 @@ Uma modernização completa do MegaEmu DataBase ROMs com arquitetura web moderna
 - **Docker Compose** para orquestração de serviços
 - **Redis** para cache, sessões e message broker
 - **PostgreSQL** com otimizações e extensões
-- **Prometheus + Grafana** para monitoramento
+- **Prometheus + Grafana** para monitoramento avançado com métricas de requisição
 - **Nginx** como reverse proxy (produção)
 - **Scripts automatizados** para backup, deploy e manutenção
 
@@ -41,6 +41,11 @@ Uma modernização completa do MegaEmu DataBase ROMs com arquitetura web moderna
 - ✅ Web scraping de metadados (GameFAQs, MobyGames, Wikipedia)
 - ✅ Full-text search otimizado
 - ✅ Exportação em múltiplos formatos
+
+### Segurança e Monitoramento
+- 🔒 Autenticação avançada com RBAC (roles: ADMIN, USER, GUEST, MODERATOR)
+- 📝 Logging estruturado em formato JSON
+- 📈 Métricas de desempenho com Prometheus (duração de requisições, contadores de requests)
 
 ### Melhorias UX
 - 🎨 Interface responsiva (mobile-first)
@@ -248,6 +253,11 @@ HEALTH_CHECK_INTERVAL=30
 
 # Desenvolvimento
 RELOAD=true
+```
+
+## Testes e CI/CD
+
+O projeto inclui testes unitários para componentes chave como dependências de autenticação e middlewares. O pipeline CI/CD no GitHub Actions cobre linting, testes backend/frontend, testes de integração e scans de segurança.
 SHOW_DOCS=true
 SHOW_REDOC=true
 
@@ -416,6 +426,20 @@ MIT License - veja [LICENSE](LICENSE) para detalhes.
 - **Testes Adicionais**: Adicionado `test_favorites.py` para cobrir cenários de adicionar/remover favoritos, expandindo a cobertura de testes sem alterar funções existentes.
 - **Otimização de Performance**: Índices adicionados na tabela `user_favorite_games` para otimizar consultas de favoritos.
 - **Documentação**: Atualizações no README para incluir detalhes sobre o sistema de favoritos e melhores práticas de manutenção.
+
+## Script de Diagnóstico de Portas
+
+O script `check_ports.ps1` localizado em `backend/scripts` permite o auto-diagnóstico de conflitos de portas, com logs detalhados e verificações de erro para manter a robustez do sistema.
+
+### Como Usar
+
+Execute o script no PowerShell antes de iniciar a aplicação para verificar conflitos de portas:
+
+```powershell
+.\backend\scripts\check_ports.ps1
+```
+
+Isso ajuda a evitar erros ao iniciar serviços como Docker Compose, verificando portas como 8000 (API), 3000 (Frontend), 5432 (PostgreSQL), 6379 (Redis), etc.
 
 ## 🤝 Contribuição
 

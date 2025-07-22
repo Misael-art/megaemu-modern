@@ -69,19 +69,8 @@ class ROMService(BaseService[ROM, ROMCreate, ROMUpdate]):
         *,
         rom_in: ROMCreate
     ) -> ROM:
-        """Cria uma nova ROM.
+        """Cria uma nova ROM."""
         
-        Args:
-            db: Sessão do banco de dados
-            rom_in: Dados da ROM
-            
-        Returns:
-            ROM criada
-            
-        Raises:
-            HTTPException: Se ROM já existe
-        """
-        # Verifica se ROM já existe
         existing_rom = await self.get_by_file_path(db, file_path=rom_in.file_path)
         if existing_rom:
             raise HTTPException(
@@ -89,15 +78,21 @@ class ROMService(BaseService[ROM, ROMCreate, ROMUpdate]):
                 detail="ROM já existe"
             )
         
-        # Calcula hashes se arquivo existe
+        rom_data = rom_in.dict()
         if os.path.exists(rom_in.file_path):
-            hashes = await self._calculate_file_hashes(rom_in.file_path)
-            rom_data = rom_in.dict()
-            rom_data.update(hashes)
-        else:
-            rom_data = rom_in.dict()
+            try:
+                hashes = await self._calculate_file_hashes(rom_in.file_path)
+                rom_data.update(hashes)
+            except Exception as e:
+                logger.error(f"Falha ao calcular hashes para {rom_in.file_path}: {e}")
+                # Fallback: Continuar sem hashes
+                rom_data.update({
+                    'crc32_hash': None,
+                    'md5_hash': None,
+                    'sha1_hash': None,
+                    'sha256_hash': None
+                })
         
-        # Cria a ROM
         rom = ROM(**rom_data)
         
         # Auto-verificação se solicitada
@@ -425,10 +420,11 @@ class ROMService(BaseService[ROM, ROMCreate, ROMUpdate]):
                     if rom and operation.data and "status" in operation.data:
                         rom.status = ROMStatus(operation.data["status"])
                         await db.commit()
-                
+                    
                 results["success_count"] += 1
                 
             except Exception as e:
+                logger.error(f"Bulk operation failed for ROM {rom_id}: {str(e)}")
                 results["error_count"] += 1
                 results["errors"].append({
                     "rom_id": str(rom_id),
@@ -503,6 +499,7 @@ class ROMService(BaseService[ROM, ROMCreate, ROMUpdate]):
                     results["imported_count"] += 1
                     
                 except Exception as e:
+                    logger.error(f"Import failed for file {file_path}: {str(e)}")
                     results["error_count"] += 1
                     results["errors"].append({
                         "file": str(file_path),
@@ -547,7 +544,8 @@ class ROMService(BaseService[ROM, ROMCreate, ROMUpdate]):
             hashes["sha1_hash"] = sha1_hash.hexdigest()
             hashes["sha256_hash"] = sha256_hash.hexdigest()
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to calculate hashes for {file_path}: {str(e)}")
             pass
         
         return hashes

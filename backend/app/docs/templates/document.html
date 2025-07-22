@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.title }} - {{ config.project_name }}{% endblock %}
+{% block description %}{{ document.metadata.get('description', document.title) }}{% endblock %}
+{% block og_title %}{{ document.title }}{% endblock %}
+{% block og_description %}{{ document.metadata.get('description', document.title) }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .document-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+    }
+    
+    .document-meta {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .document-tags .badge {
+        margin-right: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .document-toc {
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        position: sticky;
+        top: 100px;
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+    }
+    
+    .document-content {
+        line-height: 1.7;
+    }
+    
+    .document-content h1,
+    .document-content h2,
+    .document-content h3,
+    .document-content h4,
+    .document-content h5,
+    .document-content h6 {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        scroll-margin-top: 100px;
+    }
+    
+    .document-content h1:first-child,
+    .document-content h2:first-child {
+        margin-top: 0;
+    }
+    
+    .document-content pre {
+        background: #2d3748;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        overflow-x: auto;
+        margin: 1.5rem 0;
+    }
+    
+    .document-content code {
+        background: #e2e8f0;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.9em;
+    }
+    
+    .document-content pre code {
+        background: transparent;
+        padding: 0;
+    }
+    
+    .document-content blockquote {
+        border-left: 4px solid #667eea;
+        padding-left: 1rem;
+        margin: 1.5rem 0;
+        font-style: italic;
+        background: #f8f9fa;
+        padding: 1rem 1rem 1rem 2rem;
+        border-radius: 0 0.5rem 0.5rem 0;
+    }
+    
+    .document-content table {
+        width: 100%;
+        margin: 1.5rem 0;
+        border-collapse: collapse;
+    }
+    
+    .document-content table th,
+    .document-content table td {
+        padding: 0.75rem;
+        border: 1px solid #dee2e6;
+        text-align: left;
+    }
+    
+    .document-content table th {
+        background: #f8f9fa;
+        font-weight: 600;
+    }
+    
+    .document-content .admonition {
+        margin: 1.5rem 0;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid;
+    }
+    
+    .document-content .admonition.note {
+        background: #e3f2fd;
+        border-color: #2196f3;
+    }
+    
+    .document-content .admonition.tip {
+        background: #e8f5e8;
+        border-color: #4caf50;
+    }
+    
+    .document-content .admonition.warning {
+        background: #fff3e0;
+        border-color: #ff9800;
+    }
+    
+    .document-content .admonition.danger {
+        background: #ffebee;
+        border-color: #f44336;
+    }
+    
+    .document-feedback {
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        margin-top: 3rem;
+        text-align: center;
+    }
+    
+    .rating-stars {
+        font-size: 1.5rem;
+        margin: 1rem 0;
+    }
+    
+    .rating-stars .star {
+        color: #ddd;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+    
+    .rating-stars .star:hover,
+    .rating-stars .star.active {
+        color: #ffc107;
+    }
+    
+    .document-navigation {
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .copy-code-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    
+    .document-content pre:hover .copy-code-btn {
+        opacity: 1;
+    }
+    
+    .copy-code-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+    
+    @media (max-width: 768px) {
+        .document-toc {
+            position: static;
+            max-height: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="document-header">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <!-- Breadcrumb -->
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-3">
+                        <li class="breadcrumb-item"><a href="/" class="text-white-50">Início</a></li>
+                        <li class="breadcrumb-item"><a href="/" class="text-white-50">Documentação</a></li>
+                        <li class="breadcrumb-item active text-white" aria-current="page">{{ document.title }}</li>
+                    </ol>
+                </nav>
+                
+                <!-- Document title and meta -->
+                <h1 class="display-4 mb-3">{{ document.title }}</h1>
+                
+                <div class="document-meta mb-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <span class="badge bg-light text-dark me-2">
+                                <i class="fas fa-{{ 'book' if document.type.value == 'tutorial' else 'file-alt' if document.type.value == 'guide' else 'code' if document.type.value == 'api_reference' else 'question-circle' if document.type.value == 'faq' else 'exclamation-triangle' if document.type.value == 'troubleshooting' else 'list' }}"></i>
+                                {{ document.type.value.replace('_', ' ').title() }}
+                            </span>
+                            
+                            {% if document.metadata.get('difficulty') %}
+                            <span class="badge bg-{{ 'success' if document.metadata.difficulty == 'beginner' else 'warning' if document.metadata.difficulty == 'intermediate' else 'danger' }} me-2">
+                                {{ document.metadata.difficulty.title() }}
+                            </span>
+                            {% endif %}
+                            
+                            {% if document.metadata.get('estimated_time') %}
+                            <span class="badge bg-info me-2">
+                                <i class="fas fa-clock"></i> {{ document.metadata.estimated_time }}
+                            </span>
+                            {% endif %}
+                            
+                            <span class="text-white-50">
+                                <i class="fas fa-calendar"></i>
+                                Atualizado em {{ document.updated_at.strftime('%d/%m/%Y') }}
+                            </span>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <span class="text-white-50">
+                                <i class="fas fa-tag"></i> v{{ document.version }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tags -->
+                {% if document.tags %}
+                <div class="document-tags">
+                    {% for tag in document.tags %}
+                    <span class="badge bg-primary">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="row">
+        <!-- Table of Contents -->
+        {% if toc %}
+        <div class="col-lg-3 d-none d-lg-block">
+            <div class="document-toc">
+                <h6 class="fw-bold mb-3">
+                    <i class="fas fa-list"></i> Índice
+                </h6>
+                {{ toc|safe }}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Main content -->
+        <div class="col-lg-{{ '9' if toc else '12' }}">
+            <div class="document-content">
+                {{ content|safe }}
+            </div>
+            
+            <!-- Document feedback -->
+            {% if config.feedback_enabled %}
+            <div class="document-feedback">
+                <h5>Esta documentação foi útil?</h5>
+                <p class="text-muted">Sua avaliação nos ajuda a melhorar a documentação.</p>
+                
+                <div class="rating-stars" data-document-id="{{ document.id }}">
+                    <span class="star" data-rating="1">★</span>
+                    <span class="star" data-rating="2">★</span>
+                    <span class="star" data-rating="3">★</span>
+                    <span class="star" data-rating="4">★</span>
+                    <span class="star" data-rating="5">★</span>
+                </div>
+                
+                <div class="feedback-form" style="display: none;">
+                    <textarea class="form-control mb-3" placeholder="Comentários opcionais..." rows="3"></textarea>
+                    <button class="btn btn-primary" onclick="submitFeedback()">Enviar Feedback</button>
+                </div>
+                
+                <div class="feedback-thanks" style="display: none;">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i>
+                        Obrigado pelo seu feedback!
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Document navigation -->
+            <div class="document-navigation">
+                <div class="row">
+                    <div class="col-md-6">
+                        {% if document.metadata.get('prev_doc') %}
+                        <a href="/{{ document.metadata.prev_doc.id }}.html" class="btn btn-outline-primary">
+                            <i class="fas fa-arrow-left"></i>
+                            {{ document.metadata.prev_doc.title }}
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        {% if document.metadata.get('next_doc') %}
+                        <a href="/{{ document.metadata.next_doc.id }}.html" class="btn btn-outline-primary">
+                            {{ document.metadata.next_doc.title }}
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12 text-center">
+                        <a href="/" class="btn btn-link">
+                            <i class="fas fa-home"></i>
+                            Voltar ao Início
+                        </a>
+                        
+                        <a href="#" class="btn btn-link" onclick="window.print()">
+                            <i class="fas fa-print"></i>
+                            Imprimir
+                        </a>
+                        
+                        <a href="#" class="btn btn-link" onclick="shareDocument()">
+                            <i class="fas fa-share"></i>
+                            Compartilhar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Copy code functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Add copy buttons to code blocks
+    document.querySelectorAll('pre').forEach(function(pre) {
+        const button = document.createElement('button');
+        button.className = 'copy-code-btn';
+        button.textContent = 'Copiar';
+        button.onclick = function() {
+            const code = pre.querySelector('code');
+            const text = code ? code.textContent : pre.textContent;
+            
+            navigator.clipboard.writeText(text).then(function() {
+                button.textContent = 'Copiado!';
+                setTimeout(function() {
+                    button.textContent = 'Copiar';
+                }, 2000);
+            });
+        };
+        
+        pre.style.position = 'relative';
+        pre.appendChild(button);
+    });
+    
+    // Smooth scrolling for TOC links
+    document.querySelectorAll('.document-toc a').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    });
+    
+    // Rating functionality
+    const stars = document.querySelectorAll('.rating-stars .star');
+    let selectedRating = 0;
+    
+    stars.forEach(function(star, index) {
+        star.addEventListener('mouseover', function() {
+            highlightStars(index + 1);
+        });
+        
+        star.addEventListener('mouseout', function() {
+            highlightStars(selectedRating);
+        });
+        
+        star.addEventListener('click', function() {
+            selectedRating = index + 1;
+            highlightStars(selectedRating);
+            document.querySelector('.feedback-form').style.display = 'block';
+        });
+    });
+    
+    function highlightStars(rating) {
+        stars.forEach(function(star, index) {
+            star.classList.toggle('active', index < rating);
+        });
+    }
+});
+
+// Submit feedback
+function submitFeedback() {
+    const documentId = document.querySelector('.rating-stars').dataset.documentId;
+    const rating = document.querySelectorAll('.rating-stars .star.active').length;
+    const comment = document.querySelector('.feedback-form textarea').value;
+    
+    // Send feedback to API
+    fetch('/api/v1/documentation/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            document_id: documentId,
+            rating: rating,
+            comment: comment
+        })
+    }).then(function(response) {
+        if (response.ok) {
+            document.querySelector('.feedback-form').style.display = 'none';
+            document.querySelector('.feedback-thanks').style.display = 'block';
+        }
+    }).catch(function(error) {
+        console.error('Error submitting feedback:', error);
+    });
+}
+
+// Share document
+function shareDocument() {
+    if (navigator.share) {
+        navigator.share({
+            title: document.title,
+            url: window.location.href
+        });
+    } else {
+        // Fallback: copy URL to clipboard
+        navigator.clipboard.writeText(window.location.href).then(function() {
+            alert('URL copiada para a área de transferência!');
+        });
+    }
+}
+
+// Track document view
+if (typeof trackEvent !== 'undefined') {
+    trackEvent('Documentation', 'document_view', '{{ document.id }}');
+}
+</script>
+{% endblock %}

@@ -1,260 +1,154 @@
-"""Serviços para gerenciamento de tarefas.
-
-Este módulo implementa a lógica de negócio para operações relacionadas
-a tarefas assíncronas, resultados e monitoramento de progresso.
-"""
-
-import asyncio
-from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Callable
 from uuid import UUID
+from datetime import datetime
+import asyncio
+from threading import Lock
+from collections import defaultdict
+import queue
 
-from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
+from fastapi import HTTPException, status
 
-from app.models.task import Task, TaskResult, TaskStatus, TaskPriority, TaskType
-from app.models.user import User
+from app.core.database import engine
+from app.models.task import Task, TaskStatus, TaskType, TaskPriority
 from app.schemas.task import (
     TaskCreate,
     TaskUpdate,
-    TaskResultCreate,
-    TaskResultUpdate,
-    TaskFilterParams,
-    TaskSearchRequest,
     TaskProgressUpdate,
-    TaskRetryRequest,
-    TaskCancelRequest,
-    TaskBulkOperation,
+    TaskFilterParams
 )
 from app.services.base import BaseService
-from app.core.config import settings
 
 
 class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
-    """Serviço para operações com tarefas."""
+    """Serviço para gerenciamento de tarefas."""
     
     def __init__(self):
         super().__init__(Task)
-        self._running_tasks: Dict[UUID, asyncio.Task] = {}
         self._task_handlers: Dict[TaskType, Callable] = {}
-    
-    async def get_by_id(
-        self,
-        db: AsyncSession,
-        task_id: UUID,
-        *,
-        load_relationships: bool = False
-    ) -> Optional[Task]:
-        """Busca tarefa por ID.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            load_relationships: Se deve carregar relacionamentos
-            
-        Returns:
-            Tarefa encontrada ou None
-        """
-        return await self.get(db, task_id, load_relationships=load_relationships)
+        self._progress_callbacks: Dict[str, List[Callable]] = defaultdict(list)
+        self._callbacks_lock = Lock()
+        self.pending_queue = queue.PriorityQueue()
+        self._worker_task = None
     
     async def create_task(
         self,
         db: AsyncSession,
         *,
-        task_in: TaskCreate
+        task_data: TaskCreate,
+        user_id: UUID
     ) -> Task:
         """Cria uma nova tarefa.
         
         Args:
             db: Sessão do banco de dados
-            task_in: Dados da tarefa
+            task_data: Dados da tarefa
+            user_id: ID do usuário
             
         Returns:
             Tarefa criada
         """
-        # Verifica dependências se especificadas
-        if task_in.depends_on:
-            for dep_id in task_in.depends_on:
-                dep_task = await self.get(db, dep_id)
-                if not dep_task:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Tarefa dependente {dep_id} não encontrada"
-                    )
+        task_dict = task_data.model_dump()
+        task_dict["user_id"] = user_id
+        task_dict["status"] = TaskStatus.PENDING
+        task_dict["progress"] = 0
+        task_dict["created_at"] = datetime.utcnow()
+        task_dict["updated_at"] = datetime.utcnow()
         
-        # Cria a tarefa
-        task = await self.create(db, obj_in=task_in)
+        task = await self.create(db, obj_in=task_dict)
         
-        # Agenda execução se necessário
-        if task_in.scheduled_for and task_in.scheduled_for <= datetime.utcnow():
-            await self._schedule_task(db, task)
-        elif not task_in.scheduled_for:
-            # Executa imediatamente se não agendada
-            await self._execute_task(db, task)
+        # Adiciona à fila de execução
+        priority = task.priority.value if task.priority else TaskPriority.MEDIUM.value
+        self.pending_queue.put((priority, task.id))
         
         return task
     
-    async def get_task_with_details(
-        self,
-        db: AsyncSession,
-        *,
-        task_id: UUID
-    ) -> Optional[Task]:
-        """Busca tarefa com todos os detalhes.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            
-        Returns:
-            Tarefa com detalhes ou None
-        """
-        query = (
-            select(Task)
-            .options(
-                selectinload(Task.user),
-                selectinload(Task.results),
-                selectinload(Task.dependencies),
-                selectinload(Task.dependents)
-            )
-            .where(Task.id == task_id)
-        )
-        
-        result = await db.execute(query)
-        return result.scalar_one_or_none()
-    
-    async def search_tasks(
-        self,
-        db: AsyncSession,
-        *,
-        search_request: TaskSearchRequest
-    ) -> Dict[str, Any]:
-        """Busca tarefas com filtros e paginação.
-        
-        Args:
-            db: Sessão do banco de dados
-            search_request: Parâmetros de busca
-            
-        Returns:
-            Resultado da busca com tarefas e metadados
-        """
-        query = select(Task).options(
-            selectinload(Task.user)
-        )
-        
-        # Aplica filtros
-        query = self._apply_filters(query, search_request.filters)
-        
-        # Conta total
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await db.execute(count_query)
-        total = total_result.scalar()
-        
-        # Aplica ordenação
-        query = self._apply_sorting(query, search_request.sort_by, search_request.sort_order)
-        
-        # Aplica paginação
-        offset = (search_request.page - 1) * search_request.page_size
-        query = query.offset(offset).limit(search_request.page_size)
-        
-        # Executa query
-        result = await db.execute(query)
-        tasks = result.scalars().all()
-        
-        return {
-            "items": tasks,
-            "total": total,
-            "page": search_request.page,
-            "page_size": search_request.page_size,
-            "total_pages": (total + search_request.page_size - 1) // search_request.page_size
-        }
-    
-    async def get_tasks_by_user(
+    async def get_user_tasks(
         self,
         db: AsyncSession,
         *,
         user_id: UUID,
-        status: Optional[TaskStatus] = None,
-        limit: Optional[int] = None
+        filters: Optional[TaskFilterParams] = None,
+        skip: int = 0,
+        limit: int = 100
     ) -> List[Task]:
-        """Busca tarefas por usuário.
+        """Busca tarefas do usuário.
         
         Args:
             db: Sessão do banco de dados
             user_id: ID do usuário
-            status: Status da tarefa (opcional)
-            limit: Limite de resultados
+            filters: Filtros opcionais
+            skip: Número de registros para pular
+            limit: Limite de registros
             
         Returns:
             Lista de tarefas
         """
-        conditions = [Task.user_id == user_id]
+        query = select(Task).where(Task.user_id == user_id)
         
-        if status:
-            conditions.append(Task.status == status)
+        if filters:
+            query = self._apply_filters(query, filters)
         
-        query = (
-            select(Task)
-            .where(and_(*conditions))
-            .order_by(Task.created_at.desc())
-        )
+        # Ordenação padrão por data de criação (mais recentes primeiro)
+        query = query.order_by(desc(Task.created_at))
         
-        if limit:
-            query = query.limit(limit)
+        # Paginação
+        query = query.offset(skip).limit(limit)
         
-        result = await db.execute(query)
-        return result.scalars().all()
-    
-    async def get_running_tasks(
-        self,
-        db: AsyncSession
-    ) -> List[Task]:
-        """Busca tarefas em execução.
-        
-        Args:
-            db: Sessão do banco de dados
-            
-        Returns:
-            Lista de tarefas em execução
-        """
-        query = (
-            select(Task)
-            .where(Task.status == TaskStatus.RUNNING)
-            .order_by(Task.started_at)
-        )
+        # Carregamento de relacionamentos
+        query = self._add_relationship_loading(query)
         
         result = await db.execute(query)
         return result.scalars().all()
     
-    async def get_pending_tasks(
+    async def update_task_status(
         self,
         db: AsyncSession,
         *,
-        limit: Optional[int] = None
-    ) -> List[Task]:
-        """Busca tarefas pendentes.
+        task_id: UUID,
+        status: TaskStatus,
+        status_message: Optional[str] = None
+    ) -> Task:
+        """Atualiza status da tarefa.
         
         Args:
             db: Sessão do banco de dados
-            limit: Limite de resultados
+            task_id: ID da tarefa
+            status: Novo status
+            status_message: Mensagem de status opcional
             
         Returns:
-            Lista de tarefas pendentes
+            Tarefa atualizada
+            
+        Raises:
+            HTTPException: Se tarefa não encontrada
         """
-        query = (
-            select(Task)
-            .where(Task.status == TaskStatus.PENDING)
-            .order_by(Task.priority.desc(), Task.created_at)
-        )
+        task = await self.get(db, task_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tarefa não encontrada"
+            )
         
-        if limit:
-            query = query.limit(limit)
+        task.status = status
+        if status_message:
+            task.status_message = status_message
         
-        result = await db.execute(query)
-        return result.scalars().all()
+        if status == TaskStatus.COMPLETED:
+            task.progress = 100
+            task.completed_at = datetime.utcnow()
+        elif status == TaskStatus.FAILED:
+            task.completed_at = datetime.utcnow()
+        
+        task.updated_at = datetime.utcnow()
+        
+        await db.commit()
+        await db.refresh(task)
+        
+        return task
     
     async def update_task_progress(
         self,
@@ -303,289 +197,6 @@ class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
         
         return task
     
-    async def retry_task(
-        self,
-        db: AsyncSession,
-        *,
-        task_id: UUID,
-        retry_request: TaskRetryRequest
-    ) -> Task:
-        """Reexecuta uma tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            retry_request: Parâmetros de reexecução
-            
-        Returns:
-            Tarefa atualizada
-            
-        Raises:
-            HTTPException: Se tarefa não encontrada ou não pode ser reexecutada
-        """
-        task = await self.get(db, task_id)
-        if not task:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Tarefa não encontrada"
-            )
-        
-        if not task.can_retry:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tarefa não pode ser reexecutada"
-            )
-        
-        # Incrementa contador de tentativas
-        task.retry_count += 1
-        
-        # Reseta status e progresso
-        task.status = TaskStatus.PENDING
-        task.progress = 0
-        task.status_message = "Aguardando reexecução"
-        task.error_message = None
-        task.started_at = None
-        task.completed_at = None
-        
-        # Atualiza parâmetros se fornecidos
-        if retry_request.parameters:
-            task.parameters = retry_request.parameters
-        
-        # Agenda nova execução
-        if retry_request.delay_seconds:
-            task.scheduled_for = datetime.utcnow() + timedelta(seconds=retry_request.delay_seconds)
-        else:
-            await self._execute_task(db, task)
-        
-        await db.commit()
-        await db.refresh(task)
-        
-        return task
-    
-    async def cancel_task(
-        self,
-        db: AsyncSession,
-        *,
-        task_id: UUID,
-        cancel_request: TaskCancelRequest
-    ) -> Task:
-        """Cancela uma tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            cancel_request: Parâmetros de cancelamento
-            
-        Returns:
-            Tarefa cancelada
-            
-        Raises:
-            HTTPException: Se tarefa não encontrada ou não pode ser cancelada
-        """
-        task = await self.get(db, task_id)
-        if not task:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Tarefa não encontrada"
-            )
-        
-        if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tarefa não pode ser cancelada"
-            )
-        
-        # Cancela tarefa em execução
-        if task.id in self._running_tasks:
-            self._running_tasks[task.id].cancel()
-            del self._running_tasks[task.id]
-        
-        # Atualiza status
-        task.status = TaskStatus.CANCELLED
-        task.completed_at = datetime.utcnow()
-        task.status_message = "Tarefa cancelada"
-        
-        if cancel_request.reason:
-            task.error_message = f"Cancelada: {cancel_request.reason}"
-        
-        await db.commit()
-        await db.refresh(task)
-        
-        return task
-    
-    async def bulk_operation(
-        self,
-        db: AsyncSession,
-        *,
-        operation: TaskBulkOperation
-    ) -> Dict[str, Any]:
-        """Executa operação em lote.
-        
-        Args:
-            db: Sessão do banco de dados
-            operation: Operação em lote
-            
-        Returns:
-            Resultado da operação
-        """
-        results = {
-            "success_count": 0,
-            "error_count": 0,
-            "errors": []
-        }
-        
-        for task_id in operation.task_ids:
-            try:
-                if operation.operation == "cancel":
-                    await self.cancel_task(
-                        db,
-                        task_id=task_id,
-                        cancel_request=TaskCancelRequest(reason="Cancelamento em lote")
-                    )
-                elif operation.operation == "retry":
-                    await self.retry_task(
-                        db,
-                        task_id=task_id,
-                        retry_request=TaskRetryRequest()
-                    )
-                elif operation.operation == "delete":
-                    await self.remove(db, task_id)
-                
-                results["success_count"] += 1
-                
-            except Exception as e:
-                results["error_count"] += 1
-                results["errors"].append({
-                    "task_id": str(task_id),
-                    "error": str(e)
-                })
-        
-        return results
-    
-    async def get_task_statistics(
-        self,
-        db: AsyncSession,
-        *,
-        user_id: Optional[UUID] = None
-    ) -> Dict[str, Any]:
-        """Obtém estatísticas de tarefas.
-        
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário (opcional)
-            
-        Returns:
-            Estatísticas das tarefas
-        """
-        base_query = select(Task)
-        
-        if user_id:
-            base_query = base_query.where(Task.user_id == user_id)
-        
-        # Conta por status
-        status_counts = {}
-        for status in TaskStatus:
-            count_query = select(func.count()).where(
-                base_query.whereclause if base_query.whereclause is not None else True,
-                Task.status == status
-            )
-            result = await db.execute(count_query)
-            status_counts[status.value] = result.scalar()
-        
-        # Conta por tipo
-        type_counts = {}
-        for task_type in TaskType:
-            count_query = select(func.count()).where(
-                base_query.whereclause if base_query.whereclause is not None else True,
-                Task.task_type == task_type
-            )
-            result = await db.execute(count_query)
-            type_counts[task_type.value] = result.scalar()
-        
-        # Tempo médio de execução
-        avg_duration_query = select(func.avg(Task.duration)).where(
-            base_query.whereclause if base_query.whereclause is not None else True,
-            Task.status == TaskStatus.COMPLETED
-        )
-        avg_duration_result = await db.execute(avg_duration_query)
-        avg_duration = avg_duration_result.scalar() or 0
-        
-        return {
-            "status_counts": status_counts,
-            "type_counts": type_counts,
-            "average_duration": avg_duration,
-            "running_tasks": len(self._running_tasks)
-        }
-    
-    async def _schedule_task(self, db: AsyncSession, task: Task) -> None:
-        """Agenda execução da tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task: Tarefa para agendar
-        """
-        # TODO: Implementar agendamento de tarefas
-        pass
-    
-    async def _execute_task(self, db: AsyncSession, task: Task) -> None:
-        """Executa uma tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task: Tarefa para executar
-        """
-        # Verifica se handler existe para o tipo de tarefa
-        if task.task_type not in self._task_handlers:
-            task.status = TaskStatus.FAILED
-            task.error_message = f"Handler não encontrado para tipo {task.task_type}"
-            await db.commit()
-            return
-        
-        # Atualiza status para executando
-        task.status = TaskStatus.RUNNING
-        task.started_at = datetime.utcnow()
-        task.progress = 0
-        await db.commit()
-        
-        # Cria e executa tarefa assíncrona
-        async_task = asyncio.create_task(
-            self._run_task_handler(db, task)
-        )
-        self._running_tasks[task.id] = async_task
-        
-        try:
-            await async_task
-        except asyncio.CancelledError:
-            task.status = TaskStatus.CANCELLED
-        except Exception as e:
-            task.status = TaskStatus.FAILED
-            task.error_message = str(e)
-        finally:
-            if task.id in self._running_tasks:
-                del self._running_tasks[task.id]
-            
-            task.completed_at = datetime.utcnow()
-            await db.commit()
-    
-    async def _run_task_handler(
-        self,
-        db: AsyncSession,
-        task: Task
-    ) -> None:
-        """Executa o handler da tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task: Tarefa para executar
-        """
-        handler = self._task_handlers[task.task_type]
-        await handler(db, task)
-        
-        # Marca como concluída se não houve erro
-        if task.status == TaskStatus.RUNNING:
-            task.status = TaskStatus.COMPLETED
-            task.progress = 100
-    
     def register_task_handler(
         self,
         task_type: TaskType,
@@ -598,6 +209,20 @@ class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
             handler: Função handler
         """
         self._task_handlers[task_type] = handler
+    
+    def register_progress_callback(
+        self, 
+        task_id: str, 
+        callback: Callable[[Dict[str, Any]], None]
+    ) -> None:
+        """Registra callback de progresso.
+        
+        Args:
+            task_id: ID da tarefa
+            callback: Função de callback
+        """
+        with self._callbacks_lock:
+            self._progress_callbacks[task_id].append(callback)
     
     def _apply_filters(self, query: Select, filters: TaskFilterParams) -> Select:
         """Aplica filtros à query.
@@ -667,93 +292,61 @@ class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
         Returns:
             Query com relacionamentos
         """
-        return query.options(
-            selectinload(Task.user),
-            selectinload(Task.results),
-            selectinload(Task.dependencies),
-            selectinload(Task.dependents)
-        )
+        return query.options(selectinload(Task.results))
+    
+    async def _execute_task(self, db: AsyncSession, task: Task) -> None:
+        """Executa uma tarefa.
+        
+        Args:
+            db: Sessão do banco de dados
+            task: Tarefa a ser executada
+        """
+        try:
+            # Atualiza status para executando
+            await self.update_task_status(
+                db, 
+                task_id=task.id, 
+                status=TaskStatus.RUNNING
+            )
+            
+            # Executa handler se registrado
+            if task.task_type in self._task_handlers:
+                handler = self._task_handlers[task.task_type]
+                await handler(db, task)
+            
+            # Marca como concluída se não houve erro
+            if task.status == TaskStatus.RUNNING:
+                await self.update_task_status(
+                    db,
+                    task_id=task.id,
+                    status=TaskStatus.COMPLETED
+                )
+                
+        except Exception as e:
+            # Marca como falha em caso de erro
+            await self.update_task_status(
+                db,
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                status_message=str(e)
+            )
+    
+    async def _worker(self):
+        """Worker para processar tarefas da fila."""
+        while True:
+            try:
+                priority, task_id = self.pending_queue.get(timeout=1)
+                async with AsyncSession(engine) as db:
+                    task = await self.get(db, task_id)
+                    if task and task.status == TaskStatus.PENDING:
+                        await self._execute_task(db, task)
+                self.pending_queue.task_done()
+            except queue.Empty:
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"Erro no worker de tarefas: {e}")
+                await asyncio.sleep(1)
 
 
-class TaskResultService(BaseService[TaskResult, TaskResultCreate, TaskResultUpdate]):
-    """Serviço para operações com resultados de tarefas."""
-    
-    def __init__(self):
-        super().__init__(TaskResult)
-    
-    async def create_result(
-        self,
-        db: AsyncSession,
-        *,
-        result_in: TaskResultCreate
-    ) -> TaskResult:
-        """Cria um novo resultado de tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            result_in: Dados do resultado
-            
-        Returns:
-            Resultado criado
-        """
-        return await self.create(db, obj_in=result_in)
-    
-    async def get_by_task(
-        self,
-        db: AsyncSession,
-        *,
-        task_id: UUID
-    ) -> List[TaskResult]:
-        """Busca resultados por tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            
-        Returns:
-            Lista de resultados
-        """
-        query = (
-            select(TaskResult)
-            .where(TaskResult.task_id == task_id)
-            .order_by(TaskResult.created_at)
-        )
-        
-        result = await db.execute(query)
-        return result.scalars().all()
-    
-    async def get_latest_result(
-        self,
-        db: AsyncSession,
-        *,
-        task_id: UUID
-    ) -> Optional[TaskResult]:
-        """Busca resultado mais recente da tarefa.
-        
-        Args:
-            db: Sessão do banco de dados
-            task_id: ID da tarefa
-            
-        Returns:
-            Resultado mais recente ou None
-        """
-        query = (
-            select(TaskResult)
-            .where(TaskResult.task_id == task_id)
-            .order_by(TaskResult.created_at.desc())
-            .limit(1)
-        )
-        
-        result = await db.execute(query)
-        return result.scalar_one_or_none()
-    
-    def _add_relationship_loading(self, query: Select) -> Select:
-        """Adiciona carregamento de relacionamentos.
-        
-        Args:
-            query: Query base
-            
-        Returns:
-            Query com relacionamentos
-        """
-        return query.options(selectinload(TaskResult.task))
+# Instância global do serviço
+task_service = TaskService()

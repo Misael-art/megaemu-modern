@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="{{ config.default_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ config.project_name }}{% endblock %}</title>
+    
+    <!-- Meta tags -->
+    <meta name="description" content="{% block description %}{{ config.project_description }}{% endblock %}">
+    <meta name="author" content="{{ config.project_name }}">
+    <meta name="generator" content="MegaEmu Documentation System">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% block og_title %}{{ config.project_name }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ config.project_description }}{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ config.project_name }}">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    
+    <!-- Styles -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/docs.css" rel="stylesheet">
+    {% if config.custom_css %}
+    <link href="{{ config.custom_css }}" rel="stylesheet">
+    {% endif %}
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{{ config.theme }}" data-bs-theme="auto">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-gamepad me-2"></i>
+                {{ config.project_name }}
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Início</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            Documentação
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/api-reference.html">API Reference</a></li>
+                            <li><a class="dropdown-item" href="/getting-started.html">Getting Started</a></li>
+                            <li><a class="dropdown-item" href="/troubleshooting-guide.html">Troubleshooting</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/tutorials.html">Tutoriais</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ config.docs_url }}">API Docs</a>
+                    </li>
+                </ul>
+                
+                <!-- Search -->
+                <div class="d-flex me-3">
+                    <div class="search-container">
+                        <input type="search" class="form-control" id="searchInput" placeholder="Buscar documentação..." autocomplete="off">
+                        <div id="searchResults" class="search-results"></div>
+                    </div>
+                </div>
+                
+                <!-- Theme toggle -->
+                <button class="btn btn-outline-light btn-sm me-2" id="themeToggle" title="Alternar tema">
+                    <i class="fas fa-moon"></i>
+                </button>
+                
+                <!-- Language selector -->
+                <div class="dropdown">
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-globe"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% for lang in config.supported_languages %}
+                        <li>
+                            <a class="dropdown-item" href="?lang={{ lang }}">
+                                {% if lang == 'pt-BR' %}🇧🇷 Português{% elif lang == 'en-US' %}🇺🇸 English{% endif %}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>{{ config.project_name }}</h5>
+                    <p class="text-muted">{{ config.project_description }}</p>
+                    <p class="text-muted">Versão {{ config.project_version }}</p>
+                </div>
+                <div class="col-md-3">
+                    <h6>Links Úteis</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="/" class="text-light">Documentação</a></li>
+                        <li><a href="{{ config.docs_url }}" class="text-light">API Docs</a></li>
+                        <li><a href="/troubleshooting-guide.html" class="text-light">Suporte</a></li>
+                        <li><a href="https://github.com/megaemu/megaemu-modern" class="text-light">GitHub</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Comunidade</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-light">Discord</a></li>
+                        <li><a href="#" class="text-light">Reddit</a></li>
+                        <li><a href="#" class="text-light">Twitter</a></li>
+                        <li><a href="#" class="text-light">YouTube</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <p class="mb-0 text-muted">&copy; 2024 {{ config.project_name }}. Todos os direitos reservados.</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small class="text-muted">Feito com ❤️ para a comunidade de emulação</small>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="/static/js/docs.js"></script>
+    
+    {% block extra_scripts %}{% endblock %}
+    
+    <!-- Analytics -->
+    {% if config.analytics_enabled %}
+    <script>
+        // Analytics tracking
+        function trackEvent(category, action, label) {
+            if (typeof gtag !== 'undefined') {
+                gtag('event', action, {
+                    event_category: category,
+                    event_label: label
+                });
+            }
+        }
+        
+        // Track page views
+        trackEvent('Documentation', 'page_view', window.location.pathname);
+        
+        // Track search
+        document.getElementById('searchInput')?.addEventListener('input', function(e) {
+            if (e.target.value.length > 2) {
+                trackEvent('Documentation', 'search', e.target.value);
+            }
+        });
+    </script>
+    {% endif %}
+</body>
+</html>

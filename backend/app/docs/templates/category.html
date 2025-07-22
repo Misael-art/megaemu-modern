@@ -1,0 +1,820 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category_title }} - {{ config.project_name }}{% endblock %}
+{% block description %}{{ category_description }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .category-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 3rem 0;
+        margin-bottom: 2rem;
+    }
+    
+    .category-icon {
+        width: 80px;
+        height: 80px;
+        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+    
+    .category-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+    }
+    
+    .category-description {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-bottom: 2rem;
+    }
+    
+    .category-stats {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+    
+    .category-stat {
+        text-align: center;
+    }
+    
+    .category-stat-number {
+        font-size: 1.5rem;
+        font-weight: 600;
+        display: block;
+    }
+    
+    .category-stat-label {
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+    
+    .filters-section {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    .filter-group {
+        margin-bottom: 1rem;
+    }
+    
+    .filter-group:last-child {
+        margin-bottom: 0;
+    }
+    
+    .filter-label {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .filter-tags {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .filter-tag {
+        padding: 0.25rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: white;
+        color: #4a5568;
+        text-decoration: none;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    
+    .filter-tag:hover,
+    .filter-tag.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .sort-controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .sort-label {
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .view-toggle {
+        display: flex;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        margin-left: auto;
+    }
+    
+    .view-toggle button {
+        padding: 0.5rem 1rem;
+        border: none;
+        background: white;
+        color: #4a5568;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .view-toggle button.active {
+        background: #667eea;
+        color: white;
+    }
+    
+    .documents-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .documents-list {
+        display: none;
+    }
+    
+    .documents-list.active {
+        display: block;
+    }
+    
+    .documents-grid.active {
+        display: grid;
+    }
+    
+    .document-card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s;
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+    
+    .document-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .document-header {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    
+    .document-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .document-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0;
+        line-height: 1.3;
+    }
+    
+    .document-description {
+        color: #718096;
+        margin-bottom: 1rem;
+        line-height: 1.5;
+    }
+    
+    .document-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: #a0aec0;
+    }
+    
+    .document-tags {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    
+    .document-tag {
+        padding: 0.25rem 0.5rem;
+        background: #f7fafc;
+        color: #4a5568;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .document-list-item {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        align-items: center;
+    }
+    
+    .document-list-item:hover {
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .document-list-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .document-list-content {
+        flex: 1;
+    }
+    
+    .document-list-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .document-list-description {
+        color: #718096;
+        font-size: 0.9rem;
+    }
+    
+    .document-list-meta {
+        text-align: right;
+        font-size: 0.8rem;
+        color: #a0aec0;
+    }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+    
+    .pagination a,
+    .pagination span {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        color: #4a5568;
+        transition: all 0.2s;
+    }
+    
+    .pagination a:hover {
+        background: #f7fafc;
+        text-decoration: none;
+    }
+    
+    .pagination .current {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 3rem;
+        color: #718096;
+    }
+    
+    .no-results-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    @media (max-width: 768px) {
+        .category-title {
+            font-size: 2rem;
+        }
+        
+        .category-stats {
+            justify-content: center;
+        }
+        
+        .documents-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .sort-controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .view-toggle {
+            margin-left: 0;
+            margin-top: 1rem;
+        }
+        
+        .document-list-item {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .document-list-meta {
+            text-align: left;
+            margin-top: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Category Header -->
+<div class="category-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-8">
+                <div class="category-icon">
+                    <i class="fas fa-{{ category_icon }}"></i>
+                </div>
+                
+                <h1 class="category-title">{{ category_title }}</h1>
+                <p class="category-description">{{ category_description }}</p>
+                
+                <div class="category-stats">
+                    <div class="category-stat">
+                        <span class="category-stat-number">{{ documents|length }}</span>
+                        <div class="category-stat-label">Documentos</div>
+                    </div>
+                    
+                    {% if category_type == 'tutorial' %}
+                    <div class="category-stat">
+                        <span class="category-stat-number">{{ documents|selectattr('metadata.difficulty', 'equalto', 'beginner')|list|length }}</span>
+                        <div class="category-stat-label">Iniciante</div>
+                    </div>
+                    <div class="category-stat">
+                        <span class="category-stat-number">{{ documents|selectattr('metadata.difficulty', 'equalto', 'intermediate')|list|length }}</span>
+                        <div class="category-stat-label">Intermediário</div>
+                    </div>
+                    <div class="category-stat">
+                        <span class="category-stat-number">{{ documents|selectattr('metadata.difficulty', 'equalto', 'advanced')|list|length }}</span>
+                        <div class="category-stat-label">Avançado</div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if category_type == 'api_reference' %}
+                    <div class="category-stat">
+                        <span class="category-stat-number">{{ documents|selectattr('metadata.method')|list|length }}</span>
+                        <div class="category-stat-label">Endpoints</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="col-lg-4 text-center">
+                <div class="search-box">
+                    <div class="input-group">
+                        <input type="search" class="form-control" id="categorySearch" placeholder="Buscar nesta categoria..." autocomplete="off">
+                        <button class="btn btn-light" type="button">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div id="categorySearchResults" class="search-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Filters -->
+    <div class="filters-section">
+        <div class="row">
+            {% if category_type == 'tutorial' %}
+            <div class="col-md-4">
+                <div class="filter-group">
+                    <label class="filter-label">Dificuldade:</label>
+                    <div class="filter-tags">
+                        <span class="filter-tag active" data-filter="all">Todos</span>
+                        <span class="filter-tag" data-filter="beginner">Iniciante</span>
+                        <span class="filter-tag" data-filter="intermediate">Intermediário</span>
+                        <span class="filter-tag" data-filter="advanced">Avançado</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if category_type == 'api_reference' %}
+            <div class="col-md-4">
+                <div class="filter-group">
+                    <label class="filter-label">Método HTTP:</label>
+                    <div class="filter-tags">
+                        <span class="filter-tag active" data-filter="all">Todos</span>
+                        <span class="filter-tag" data-filter="GET">GET</span>
+                        <span class="filter-tag" data-filter="POST">POST</span>
+                        <span class="filter-tag" data-filter="PUT">PUT</span>
+                        <span class="filter-tag" data-filter="DELETE">DELETE</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="col-md-4">
+                <div class="filter-group">
+                    <label class="filter-label">Tags:</label>
+                    <div class="filter-tags">
+                        <span class="filter-tag active" data-filter="all">Todas</span>
+                        {% for tag in all_tags[:6] %}
+                        <span class="filter-tag" data-filter="{{ tag }}">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="filter-group">
+                    <label class="filter-label">Atualização:</label>
+                    <div class="filter-tags">
+                        <span class="filter-tag active" data-filter="all">Todas</span>
+                        <span class="filter-tag" data-filter="recent">Recentes</span>
+                        <span class="filter-tag" data-filter="popular">Populares</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sort and View Controls -->
+    <div class="sort-controls">
+        <label class="sort-label">Ordenar por:</label>
+        <select class="form-select" id="sortSelect" style="width: auto;">
+            <option value="title">Título</option>
+            <option value="created_at">Data de Criação</option>
+            <option value="updated_at">Última Atualização</option>
+            {% if category_type == 'tutorial' %}
+            <option value="difficulty">Dificuldade</option>
+            {% endif %}
+            <option value="popularity">Popularidade</option>
+        </select>
+        
+        <div class="view-toggle">
+            <button type="button" class="active" data-view="grid">
+                <i class="fas fa-th"></i>
+            </button>
+            <button type="button" data-view="list">
+                <i class="fas fa-list"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Documents Grid View -->
+    <div class="documents-grid active" id="documentsGrid">
+        {% for document in documents %}
+        <a href="/{{ document.id }}.html" class="document-card" data-tags="{{ document.tags|join(',') }}" data-difficulty="{{ document.metadata.get('difficulty', '') }}" data-method="{{ document.metadata.get('method', '') }}">
+            <div class="document-header">
+                <div class="document-icon bg-{{ 'primary' if document.type.value == 'api_reference' else 'success' if document.type.value == 'tutorial' else 'info' if document.type.value == 'guide' else 'warning' if document.type.value == 'troubleshooting' else 'secondary' }}">
+                    <i class="fas fa-{{ 'code' if document.type.value == 'api_reference' else 'book' if document.type.value == 'tutorial' else 'file-alt' if document.type.value == 'guide' else 'exclamation-triangle' if document.type.value == 'troubleshooting' else 'question-circle' if document.type.value == 'faq' else 'list' }}"></i>
+                </div>
+                <h3 class="document-title">{{ document.title }}</h3>
+            </div>
+            
+            <p class="document-description">{{ document.description }}</p>
+            
+            {% if document.tags %}
+            <div class="document-tags">
+                {% for tag in document.tags[:3] %}
+                <span class="document-tag">{{ tag }}</span>
+                {% endfor %}
+                {% if document.tags|length > 3 %}
+                <span class="document-tag">+{{ document.tags|length - 3 }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <div class="document-meta">
+                <span>
+                    {% if document.metadata.get('difficulty') %}
+                    <i class="fas fa-signal me-1"></i>
+                    {{ document.metadata.difficulty.title() }}
+                    {% elif document.metadata.get('method') %}
+                    <span class="badge bg-{{ 'success' if document.metadata.method == 'GET' else 'primary' if document.metadata.method == 'POST' else 'warning' if document.metadata.method == 'PUT' else 'danger' if document.metadata.method == 'DELETE' else 'secondary' }}">{{ document.metadata.method }}</span>
+                    {% endif %}
+                </span>
+                <span>
+                    <i class="fas fa-clock me-1"></i>
+                    {{ document.metadata.get('reading_time', '5 min') }}
+                </span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    
+    <!-- Documents List View -->
+    <div class="documents-list" id="documentsList">
+        {% for document in documents %}
+        <a href="/{{ document.id }}.html" class="document-list-item" data-tags="{{ document.tags|join(',') }}" data-difficulty="{{ document.metadata.get('difficulty', '') }}" data-method="{{ document.metadata.get('method', '') }}">
+            <div class="document-list-icon bg-{{ 'primary' if document.type.value == 'api_reference' else 'success' if document.type.value == 'tutorial' else 'info' if document.type.value == 'guide' else 'warning' if document.type.value == 'troubleshooting' else 'secondary' }}">
+                <i class="fas fa-{{ 'code' if document.type.value == 'api_reference' else 'book' if document.type.value == 'tutorial' else 'file-alt' if document.type.value == 'guide' else 'exclamation-triangle' if document.type.value == 'troubleshooting' else 'question-circle' if document.type.value == 'faq' else 'list' }}"></i>
+            </div>
+            
+            <div class="document-list-content">
+                <div class="document-list-title">{{ document.title }}</div>
+                <div class="document-list-description">{{ document.description }}</div>
+            </div>
+            
+            <div class="document-list-meta">
+                {% if document.metadata.get('difficulty') %}
+                <div>{{ document.metadata.difficulty.title() }}</div>
+                {% elif document.metadata.get('method') %}
+                <div>{{ document.metadata.method }}</div>
+                {% endif %}
+                <div>{{ document.metadata.get('reading_time', '5 min') }}</div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    
+    <!-- No Results -->
+    {% if not documents %}
+    <div class="no-results">
+        <div class="no-results-icon">
+            <i class="fas fa-search"></i>
+        </div>
+        <h3>Nenhum documento encontrado</h3>
+        <p>Não há documentos nesta categoria ainda. Volte em breve!</p>
+    </div>
+    {% endif %}
+    
+    <!-- Pagination -->
+    {% if pagination and pagination.total_pages > 1 %}
+    <div class="pagination">
+        {% if pagination.has_prev %}
+        <a href="?page={{ pagination.prev_num }}">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+        
+        {% for page_num in pagination.iter_pages() %}
+        {% if page_num %}
+        {% if page_num != pagination.page %}
+        <a href="?page={{ page_num }}">{{ page_num }}</a>
+        {% else %}
+        <span class="current">{{ page_num }}</span>
+        {% endif %}
+        {% else %}
+        <span>…</span>
+        {% endif %}
+        {% endfor %}
+        
+        {% if pagination.has_next %}
+        <a href="?page={{ pagination.next_num }}">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View toggle functionality
+    const viewToggleButtons = document.querySelectorAll('.view-toggle button');
+    const documentsGrid = document.getElementById('documentsGrid');
+    const documentsList = document.getElementById('documentsList');
+    
+    viewToggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const view = this.dataset.view;
+            
+            // Update button states
+            viewToggleButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Toggle views
+            if (view === 'grid') {
+                documentsGrid.classList.add('active');
+                documentsList.classList.remove('active');
+            } else {
+                documentsGrid.classList.remove('active');
+                documentsList.classList.add('active');
+            }
+            
+            // Track event
+            if (typeof trackEvent !== 'undefined') {
+                trackEvent('Documentation', 'view_toggle', view);
+            }
+        });
+    });
+    
+    // Filter functionality
+    const filterTags = document.querySelectorAll('.filter-tag');
+    const documentCards = document.querySelectorAll('.document-card, .document-list-item');
+    
+    filterTags.forEach(tag => {
+        tag.addEventListener('click', function() {
+            const filterType = this.closest('.filter-group').querySelector('.filter-label').textContent.toLowerCase();
+            const filterValue = this.dataset.filter;
+            
+            // Update active state within the same filter group
+            const siblingTags = this.closest('.filter-group').querySelectorAll('.filter-tag');
+            siblingTags.forEach(sibling => sibling.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Apply filters
+            applyFilters();
+            
+            // Track event
+            if (typeof trackEvent !== 'undefined') {
+                trackEvent('Documentation', 'filter_click', `${filterType}:${filterValue}`);
+            }
+        });
+    });
+    
+    // Sort functionality
+    const sortSelect = document.getElementById('sortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            sortDocuments(this.value);
+            
+            // Track event
+            if (typeof trackEvent !== 'undefined') {
+                trackEvent('Documentation', 'sort_change', this.value);
+            }
+        });
+    }
+    
+    // Search functionality
+    const categorySearch = document.getElementById('categorySearch');
+    const categorySearchResults = document.getElementById('categorySearchResults');
+    
+    if (categorySearch) {
+        let searchTimeout;
+        
+        categorySearch.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+            
+            if (query.length < 2) {
+                categorySearchResults.innerHTML = '';
+                categorySearchResults.style.display = 'none';
+                showAllDocuments();
+                return;
+            }
+            
+            searchTimeout = setTimeout(function() {
+                searchDocuments(query);
+            }, 300);
+        });
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!categorySearch.contains(e.target) && !categorySearchResults.contains(e.target)) {
+                categorySearchResults.style.display = 'none';
+            }
+        });
+    }
+    
+    function applyFilters() {
+        const activeFilters = {};
+        
+        // Get active filters from each group
+        document.querySelectorAll('.filter-group').forEach(group => {
+            const activeTag = group.querySelector('.filter-tag.active');
+            if (activeTag && activeTag.dataset.filter !== 'all') {
+                const filterType = group.querySelector('.filter-label').textContent.toLowerCase().replace(':', '');
+                activeFilters[filterType] = activeTag.dataset.filter;
+            }
+        });
+        
+        // Apply filters to documents
+        documentCards.forEach(card => {
+            let show = true;
+            
+            // Check each filter
+            Object.entries(activeFilters).forEach(([filterType, filterValue]) => {
+                if (filterType === 'dificuldade') {
+                    if (card.dataset.difficulty !== filterValue) {
+                        show = false;
+                    }
+                } else if (filterType === 'método http') {
+                    if (card.dataset.method !== filterValue) {
+                        show = false;
+                    }
+                } else if (filterType === 'tags') {
+                    const cardTags = card.dataset.tags.split(',');
+                    if (!cardTags.includes(filterValue)) {
+                        show = false;
+                    }
+                }
+            });
+            
+            card.style.display = show ? 'block' : 'none';
+        });
+    }
+    
+    function sortDocuments(sortBy) {
+        const containers = [documentsGrid, documentsList];
+        
+        containers.forEach(container => {
+            const cards = Array.from(container.children);
+            
+            cards.sort((a, b) => {
+                switch (sortBy) {
+                    case 'title':
+                        return a.querySelector('.document-title, .document-list-title').textContent.localeCompare(
+                            b.querySelector('.document-title, .document-list-title').textContent
+                        );
+                    case 'difficulty':
+                        const difficultyOrder = { 'beginner': 1, 'intermediate': 2, 'advanced': 3 };
+                        return (difficultyOrder[a.dataset.difficulty] || 0) - (difficultyOrder[b.dataset.difficulty] || 0);
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Re-append sorted cards
+            cards.forEach(card => container.appendChild(card));
+        });
+    }
+    
+    function searchDocuments(query) {
+        const results = [];
+        
+        documentCards.forEach(card => {
+            const title = card.querySelector('.document-title, .document-list-title').textContent.toLowerCase();
+            const description = card.querySelector('.document-description, .document-list-description').textContent.toLowerCase();
+            
+            if (title.includes(query.toLowerCase()) || description.includes(query.toLowerCase())) {
+                results.push({
+                    title: card.querySelector('.document-title, .document-list-title').textContent,
+                    description: card.querySelector('.document-description, .document-list-description').textContent,
+                    url: card.href
+                });
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // Show search results dropdown
+        if (results.length > 0) {
+            const html = results.slice(0, 5).map(result => `
+                <div class="search-result-item">
+                    <a href="${result.url}" class="search-result-link">
+                        <div class="search-result-title">${result.title}</div>
+                        <div class="search-result-excerpt">${result.description.substring(0, 100)}...</div>
+                    </a>
+                </div>
+            `).join('');
+            
+            categorySearchResults.innerHTML = html;
+            categorySearchResults.style.display = 'block';
+        } else {
+            categorySearchResults.innerHTML = '<div class="search-no-results">Nenhum resultado encontrado</div>';
+            categorySearchResults.style.display = 'block';
+        }
+        
+        // Track search
+        if (typeof trackEvent !== 'undefined') {
+            trackEvent('Documentation', 'category_search', query);
+        }
+    }
+    
+    function showAllDocuments() {
+        documentCards.forEach(card => {
+            card.style.display = 'block';
+        });
+    }
+});
+</script>
+{% endblock %}

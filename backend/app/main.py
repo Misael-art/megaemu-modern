@@ -11,6 +11,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -31,6 +32,13 @@ from app.core.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.container import container
+from app.services.user import UserService
+from app.services.factories import create_rom_service, create_import_service
+from app.services.task import TaskService
+from app.core.plugin_manager import plugin_manager
+from alembic import command
+from alembic.config import Config
 
 
 @asynccontextmanager
@@ -43,6 +51,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("🚀 Iniciando MegaEmu Modern Backend")
     setup_logging()
+    
+    # Executar migrações Alembic de forma assíncrona
+    try:
+        from alembic.env import run_async_migrations
+        await run_async_migrations()
+        logger.info("✅ Migrações de banco de dados aplicadas com sucesso")
+    except Exception as e:
+        logger.error(f"❌ Erro ao aplicar migrações: {e}")
+        # Não falhar se as migrações falharem em desenvolvimento
+        logger.warning("Continuando sem migrações para desenvolvimento")
+    
+    # Migrações e DI comentados temporariamente para desenvolvimento
+    logger.info("⚠️ Migrações e DI desabilitados para desenvolvimento")
+    
+    # Configurar container DI (comentado)
+    # container.register_singleton(UserService, UserService)
+    # container.register(ROMService, factory=create_rom_service, lifetime='singleton')
+    # container.register(ImportService, factory=lambda: create_import_service(container.get(ROMService), container.get(TaskService)), lifetime='transient')
+    
+    # Inicializar gerenciador de plugins
+    plugin_manager  # Força carregamento
+    logger.info(f"✅ {len(plugin_manager.list_plugins())} plugins carregados")
     
     # Verificar conexão com banco de dados
     try:
@@ -94,9 +124,9 @@ def create_application() -> FastAPI:
         title=settings.PROJECT_NAME,
         description="Sistema moderno para catalogação de ROMs de videogames retro",
         version=settings.VERSION,
-        openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.DEBUG else None,
-        docs_url=f"{settings.API_V1_STR}/docs" if settings.DEBUG else None,
-        redoc_url=f"{settings.API_V1_STR}/redoc" if settings.DEBUG else None,
+        openapi_url=f"{settings.API_V1_STR}/openapi.json",
+        docs_url=None,
+        redoc_url=None,
         lifespan=lifespan,
     )
     
@@ -201,6 +231,25 @@ def create_application() -> FastAPI:
             },
         )
     
+    # Custom Swagger UI with local assets
+    @app.get(f"{settings.API_V1_STR}/docs", include_in_schema=False)
+    async def custom_swagger_ui_html():
+        return get_swagger_ui_html(
+            openapi_url=app.openapi_url,
+            title=app.title + " - Swagger UI",
+            swagger_js_url="/static/swagger/swagger-ui-bundle.js",
+            swagger_css_url="/static/swagger/swagger-ui.css",
+        )
+
+    # Custom Redoc with local assets
+    @app.get(f"{settings.API_V1_STR}/redoc", include_in_schema=False)
+    async def custom_redoc_html():
+        return get_redoc_html(
+            openapi_url=app.openapi_url,
+            title=app.title + " - ReDoc",
+            redoc_js_url="/static/swagger/redoc.standalone.js",
+        )
+
     return app
 
 

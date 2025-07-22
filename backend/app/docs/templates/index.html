@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.project_name }} - Documentação{% endblock %}
+{% block description %}Documentação completa do {{ config.project_name }} - {{ config.project_description }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 4rem 0;
+        margin-bottom: 3rem;
+    }
+    
+    .hero-content {
+        text-align: center;
+    }
+    
+    .hero-title {
+        font-size: 3.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.25rem;
+        opacity: 0.9;
+        margin-bottom: 2rem;
+    }
+    
+    .search-hero {
+        max-width: 600px;
+        margin: 0 auto;
+        position: relative;
+    }
+    
+    .search-hero input {
+        font-size: 1.1rem;
+        padding: 1rem 1.5rem;
+        border-radius: 50px;
+        border: none;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .search-hero .btn {
+        border-radius: 50px;
+        padding: 1rem 2rem;
+    }
+    
+    .doc-category {
+        background: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .doc-category:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    }
+    
+    .doc-category-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        margin-bottom: 1rem;
+    }
+    
+    .doc-category-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #2d3748;
+    }
+    
+    .doc-category-description {
+        color: #718096;
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
+    }
+    
+    .doc-list {
+        list-style: none;
+        padding: 0;
+    }
+    
+    .doc-list li {
+        margin-bottom: 0.75rem;
+    }
+    
+    .doc-list a {
+        color: #4a5568;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-radius: 0.5rem;
+        transition: all 0.2s;
+    }
+    
+    .doc-list a:hover {
+        background: #f7fafc;
+        color: #667eea;
+        padding-left: 0.5rem;
+    }
+    
+    .doc-list a i {
+        margin-right: 0.75rem;
+        width: 16px;
+        text-align: center;
+    }
+    
+    .quick-start {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        margin-bottom: 3rem;
+    }
+    
+    .quick-start-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+    
+    .quick-start-steps {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .quick-start-steps li {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+    }
+    
+    .quick-start-steps .step-number {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: white;
+        color: #38a169;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .stats-section {
+        background: #f7fafc;
+        padding: 3rem 0;
+        margin: 3rem 0;
+    }
+    
+    .stat-card {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #667eea;
+        display: block;
+    }
+    
+    .stat-label {
+        color: #718096;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .popular-docs {
+        background: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    
+    .popular-doc-item {
+        display: flex;
+        align-items: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid #e2e8f0;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.2s;
+    }
+    
+    .popular-doc-item:last-child {
+        border-bottom: none;
+    }
+    
+    .popular-doc-item:hover {
+        background: #f7fafc;
+        margin: 0 -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        border-radius: 0.5rem;
+    }
+    
+    .popular-doc-rank {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #667eea;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .popular-doc-content {
+        flex: 1;
+    }
+    
+    .popular-doc-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .popular-doc-meta {
+        font-size: 0.85rem;
+        color: #718096;
+    }
+    
+    .recent-updates {
+        background: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    
+    .update-item {
+        display: flex;
+        align-items: flex-start;
+        padding: 1rem 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .update-item:last-child {
+        border-bottom: none;
+    }
+    
+    .update-date {
+        background: #667eea;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .update-content {
+        flex: 1;
+    }
+    
+    .update-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .update-description {
+        font-size: 0.9rem;
+        color: #718096;
+    }
+    
+    @media (max-width: 768px) {
+        .hero-title {
+            font-size: 2.5rem;
+        }
+        
+        .doc-category {
+            padding: 1.5rem;
+        }
+        
+        .quick-start {
+            padding: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="container">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <i class="fas fa-gamepad me-3"></i>
+                {{ config.project_name }}
+            </h1>
+            <p class="hero-subtitle">
+                {{ config.project_description }}
+            </p>
+            
+            <!-- Hero Search -->
+            <div class="search-hero">
+                <div class="input-group input-group-lg">
+                    <input type="search" class="form-control" id="heroSearch" placeholder="Buscar na documentação..." autocomplete="off">
+                    <button class="btn btn-light" type="button">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div id="heroSearchResults" class="search-results"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Start -->
+<div class="container">
+    <div class="quick-start">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h2 class="quick-start-title">
+                    <i class="fas fa-rocket me-2"></i>
+                    Início Rápido
+                </h2>
+                <p class="mb-4">Comece a usar o {{ config.project_name }} em poucos minutos:</p>
+                
+                <ol class="quick-start-steps">
+                    <li>
+                        <span class="step-number">1</span>
+                        <div>
+                            <strong>Instalação</strong><br>
+                            <small>Configure o ambiente e instale as dependências</small>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="step-number">2</span>
+                        <div>
+                            <strong>Configuração</strong><br>
+                            <small>Configure a API e conecte seu banco de dados</small>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="step-number">3</span>
+                        <div>
+                            <strong>Primeiro ROM</strong><br>
+                            <small>Importe seu primeiro ROM e comece a jogar</small>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+            <div class="col-lg-6 text-center">
+                <a href="/getting-started.html" class="btn btn-light btn-lg">
+                    <i class="fas fa-play me-2"></i>
+                    Começar Agora
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Documentation Categories -->
+<div class="container">
+    <div class="row">
+        {% for doc_type, documents in documents_by_type.items() %}
+        <div class="col-lg-6 col-xl-4">
+            <div class="doc-category">
+                <div class="doc-category-icon bg-{{ 'primary' if doc_type.value == 'api_reference' else 'success' if doc_type.value == 'tutorial' else 'info' if doc_type.value == 'guide' else 'warning' if doc_type.value == 'troubleshooting' else 'secondary' }}">
+                    <i class="fas fa-{{ 'code' if doc_type.value == 'api_reference' else 'book' if doc_type.value == 'tutorial' else 'file-alt' if doc_type.value == 'guide' else 'exclamation-triangle' if doc_type.value == 'troubleshooting' else 'question-circle' if doc_type.value == 'faq' else 'list' }}"></i>
+                </div>
+                
+                <h3 class="doc-category-title">
+                    {% if doc_type.value == 'api_reference' %}
+                        API Reference
+                    {% elif doc_type.value == 'tutorial' %}
+                        Tutoriais
+                    {% elif doc_type.value == 'guide' %}
+                        Guias
+                    {% elif doc_type.value == 'troubleshooting' %}
+                        Troubleshooting
+                    {% elif doc_type.value == 'faq' %}
+                        FAQ
+                    {% elif doc_type.value == 'getting_started' %}
+                        Início Rápido
+                    {% elif doc_type.value == 'examples' %}
+                        Exemplos
+                    {% elif doc_type.value == 'architecture' %}
+                        Arquitetura
+                    {% elif doc_type.value == 'deployment' %}
+                        Deploy
+                    {% else %}
+                        {{ doc_type.value.replace('_', ' ').title() }}
+                    {% endif %}
+                </h3>
+                
+                <p class="doc-category-description">
+                    {% if doc_type.value == 'api_reference' %}
+                        Documentação completa da API REST com exemplos de código e especificações detalhadas.
+                    {% elif doc_type.value == 'tutorial' %}
+                        Tutoriais passo-a-passo para aprender a usar todas as funcionalidades do sistema.
+                    {% elif doc_type.value == 'guide' %}
+                        Guias práticos para configuração, uso avançado e melhores práticas.
+                    {% elif doc_type.value == 'troubleshooting' %}
+                        Soluções para problemas comuns e guias de resolução de erros.
+                    {% elif doc_type.value == 'faq' %}
+                        Perguntas frequentes e respostas sobre o uso do sistema.
+                    {% elif doc_type.value == 'getting_started' %}
+                        Primeiros passos para começar a usar o sistema rapidamente.
+                    {% elif doc_type.value == 'examples' %}
+                        Exemplos práticos de código e casos de uso reais.
+                    {% elif doc_type.value == 'architecture' %}
+                        Documentação técnica sobre a arquitetura e design do sistema.
+                    {% elif doc_type.value == 'deployment' %}
+                        Guias para deploy e configuração em produção.
+                    {% else %}
+                        Documentação sobre {{ doc_type.value.replace('_', ' ') }}.
+                    {% endif %}
+                </p>
+                
+                <ul class="doc-list">
+                    {% for doc in documents[:5] %}
+                    <li>
+                        <a href="/{{ doc.id }}.html">
+                            <i class="fas fa-{{ 'book' if doc.type.value == 'tutorial' else 'file-alt' if doc.type.value == 'guide' else 'code' if doc.type.value == 'api_reference' else 'question-circle' if doc.type.value == 'faq' else 'exclamation-triangle' if doc.type.value == 'troubleshooting' else 'list' }}"></i>
+                            {{ doc.title }}
+                            {% if doc.metadata.get('difficulty') %}
+                            <span class="badge badge-sm bg-{{ 'success' if doc.metadata.difficulty == 'beginner' else 'warning' if doc.metadata.difficulty == 'intermediate' else 'danger' }} ms-auto">
+                                {{ doc.metadata.difficulty[:3].title() }}
+                            </span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    {% endfor %}
+                    
+                    {% if documents|length > 5 %}
+                    <li>
+                        <a href="/category/{{ doc_type.value }}.html" class="text-primary">
+                            <i class="fas fa-plus"></i>
+                            Ver todos ({{ documents|length }})
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Stats Section -->
+<div class="stats-section">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <span class="stat-number">{{ documents_by_type.values() | sum(attribute='__len__') | default(0) }}</span>
+                    <div class="stat-label">Documentos</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <span class="stat-number">{{ documents_by_type.get('tutorial', [])|length + documents_by_type.get('guide', [])|length }}</span>
+                    <div class="stat-label">Tutoriais & Guias</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <span class="stat-number">{{ documents_by_type.get('api_reference', [])|length }}</span>
+                    <div class="stat-label">APIs Documentadas</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <span class="stat-number">{{ documents_by_type.get('examples', [])|length }}</span>
+                    <div class="stat-label">Exemplos</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Popular Docs & Recent Updates -->
+<div class="container">
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="popular-docs">
+                <h4 class="mb-4">
+                    <i class="fas fa-fire text-warning me-2"></i>
+                    Documentos Populares
+                </h4>
+                
+                <!-- Mock popular documents -->
+                <a href="/getting-started.html" class="popular-doc-item">
+                    <div class="popular-doc-rank">1</div>
+                    <div class="popular-doc-content">
+                        <div class="popular-doc-title">Guia de Início Rápido</div>
+                        <div class="popular-doc-meta">1,234 visualizações</div>
+                    </div>
+                </a>
+                
+                <a href="/api-reference.html" class="popular-doc-item">
+                    <div class="popular-doc-rank">2</div>
+                    <div class="popular-doc-content">
+                        <div class="popular-doc-title">API Reference</div>
+                        <div class="popular-doc-meta">987 visualizações</div>
+                    </div>
+                </a>
+                
+                <a href="/troubleshooting-guide.html" class="popular-doc-item">
+                    <div class="popular-doc-rank">3</div>
+                    <div class="popular-doc-content">
+                        <div class="popular-doc-title">Troubleshooting</div>
+                        <div class="popular-doc-meta">756 visualizações</div>
+                    </div>
+                </a>
+                
+                <a href="/rom-import-tutorial.html" class="popular-doc-item">
+                    <div class="popular-doc-rank">4</div>
+                    <div class="popular-doc-content">
+                        <div class="popular-doc-title">Como Importar ROMs</div>
+                        <div class="popular-doc-meta">623 visualizações</div>
+                    </div>
+                </a>
+                
+                <a href="/configuration-guide.html" class="popular-doc-item">
+                    <div class="popular-doc-rank">5</div>
+                    <div class="popular-doc-content">
+                        <div class="popular-doc-title">Guia de Configuração</div>
+                        <div class="popular-doc-meta">445 visualizações</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="recent-updates">
+                <h4 class="mb-4">
+                    <i class="fas fa-clock text-info me-2"></i>
+                    Atualizações Recentes
+                </h4>
+                
+                <!-- Mock recent updates -->
+                <div class="update-item">
+                    <div class="update-date">Hoje</div>
+                    <div class="update-content">
+                        <div class="update-title">API Reference v2.1</div>
+                        <div class="update-description">Novos endpoints para gerenciamento de favoritos e melhorias na documentação.</div>
+                    </div>
+                </div>
+                
+                <div class="update-item">
+                    <div class="update-date">2 dias</div>
+                    <div class="update-content">
+                        <div class="update-title">Tutorial de Deploy</div>
+                        <div class="update-description">Novo tutorial sobre deploy com Docker e configuração de produção.</div>
+                    </div>
+                </div>
+                
+                <div class="update-item">
+                    <div class="update-date">1 sem</div>
+                    <div class="update-content">
+                        <div class="update-title">Guia de Troubleshooting</div>
+                        <div class="update-description">Adicionadas soluções para problemas de importação de ROMs grandes.</div>
+                    </div>
+                </div>
+                
+                <div class="update-item">
+                    <div class="update-date">2 sem</div>
+                    <div class="update-content">
+                        <div class="update-title">Exemplos de Código</div>
+                        <div class="update-description">Novos exemplos em Python e JavaScript para integração com a API.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Call to Action -->
+<div class="container my-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="text-center p-5 bg-light rounded">
+                <h3 class="mb-3">Não encontrou o que procura?</h3>
+                <p class="text-muted mb-4">Nossa comunidade está sempre pronta para ajudar!</p>
+                
+                <div class="d-flex justify-content-center gap-3 flex-wrap">
+                    <a href="#" class="btn btn-primary">
+                        <i class="fab fa-discord me-2"></i>
+                        Discord
+                    </a>
+                    <a href="#" class="btn btn-outline-primary">
+                        <i class="fab fa-github me-2"></i>
+                        GitHub Issues
+                    </a>
+                    <a href="#" class="btn btn-outline-primary">
+                        <i class="fas fa-envelope me-2"></i>
+                        Contato
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Hero search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const heroSearch = document.getElementById('heroSearch');
+    const heroSearchResults = document.getElementById('heroSearchResults');
+    
+    let searchTimeout;
+    
+    heroSearch.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            heroSearchResults.innerHTML = '';
+            heroSearchResults.style.display = 'none';
+            return;
+        }
+        
+        searchTimeout = setTimeout(function() {
+            performSearch(query, heroSearchResults);
+        }, 300);
+    });
+    
+    // Hide results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!heroSearch.contains(e.target) && !heroSearchResults.contains(e.target)) {
+            heroSearchResults.style.display = 'none';
+        }
+    });
+});
+
+function performSearch(query, resultsContainer) {
+    // Mock search - in real implementation, this would call the search API
+    const mockResults = [
+        {
+            title: 'Guia de Início Rápido',
+            excerpt: 'Aprenda a configurar e usar o MegaEmu Modern em poucos minutos...',
+            url: '/getting-started.html',
+            type: 'guide'
+        },
+        {
+            title: 'API Reference',
+            excerpt: 'Documentação completa da API REST com exemplos de código...',
+            url: '/api-reference.html',
+            type: 'api_reference'
+        },
+        {
+            title: 'Como Importar ROMs',
+            excerpt: 'Tutorial passo-a-passo para importar seus ROMs favoritos...',
+            url: '/rom-import-tutorial.html',
+            type: 'tutorial'
+        }
+    ].filter(result => 
+        result.title.toLowerCase().includes(query.toLowerCase()) ||
+        result.excerpt.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    if (mockResults.length > 0) {
+        const html = mockResults.map(result => `
+            <div class="search-result-item">
+                <a href="${result.url}" class="search-result-link">
+                    <div class="search-result-title">${result.title}</div>
+                    <div class="search-result-excerpt">${result.excerpt}</div>
+                    <div class="search-result-type">${result.type.replace('_', ' ')}</div>
+                </a>
+            </div>
+        `).join('');
+        
+        resultsContainer.innerHTML = html;
+        resultsContainer.style.display = 'block';
+    } else {
+        resultsContainer.innerHTML = '<div class="search-no-results">Nenhum resultado encontrado</div>';
+        resultsContainer.style.display = 'block';
+    }
+}
+
+// Track page interactions
+if (typeof trackEvent !== 'undefined') {
+    // Track hero search
+    document.getElementById('heroSearch')?.addEventListener('input', function(e) {
+        if (e.target.value.length > 2) {
+            trackEvent('Documentation', 'hero_search', e.target.value);
+        }
+    });
+    
+    // Track category clicks
+    document.querySelectorAll('.doc-list a').forEach(function(link) {
+        link.addEventListener('click', function() {
+            trackEvent('Documentation', 'category_click', this.textContent.trim());
+        });
+    });
+    
+    // Track quick start click
+    document.querySelector('.quick-start .btn')?.addEventListener('click', function() {
+        trackEvent('Documentation', 'quick_start_click', 'getting_started');
+    });
+}
+</script>
+{% endblock %}

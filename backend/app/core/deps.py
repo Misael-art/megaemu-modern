@@ -4,15 +4,15 @@ Contém funções de dependência para autenticação de usuários no FastAPI.
 """
 
 import uuid
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
-from app.database import get_db
-from app.models.user import User
+from app.core.database import get_db
+from app.models.user import User, UserRole
 from app.services.user import UserService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -78,6 +78,38 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
     return current_user
+
+async def get_current_active_admin(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Obtém o administrador atual ativo.
+    
+    Args:
+        current_user: Usuário atual da dependência
+        
+    Returns:
+        Administrador ativo
+        
+    Raises:
+        HTTPException: Se não for administrador
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Privilégios insuficientes"
+        )
+    return current_user
+
+# Nova dependência para RBAC baseada em roles
+def get_user_with_role(roles: List[UserRole]):
+    def dependency(current_user: User = Depends(get_current_active_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permissões insuficientes para esta role"
+            )
+        return current_user
+    return dependency
 
 async def get_current_active_superuser(
     current_user: User = Depends(get_current_user)

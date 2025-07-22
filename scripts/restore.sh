@@ -346,6 +346,16 @@ restore_postgresql() {
         --if-exists \
         "$db_backup_file" || error "Falha no restore do PostgreSQL"
     
+    if [[ -n "$PITR_TIMESTAMP" ]]; then
+        log "Aplicando PITR para PostgreSQL até $PITR_TIMESTAMP..."
+        # Assumindo WAL arquivos em $EXTRACTED_DIR/wal
+        # Configurar recovery.conf ou postgresql.conf para PITR
+        echo "restore_command = 'cp $EXTRACTED_DIR/wal/%f %p'" > recovery.conf
+        echo "recovery_target_time = '$PITR_TIMESTAMP'" >> recovery.conf
+        # Mover para data dir do Postgres e reiniciar (ajustar caminhos)
+        warning "PITR requer configuração manual do servidor PostgreSQL para recovery mode."
+    fi
+    
     log "Restore do PostgreSQL concluído com sucesso"
 }
 
@@ -391,6 +401,13 @@ restore_redis() {
     # Nota: Este passo pode precisar ser adaptado dependendo da configuração
     warning "Restore do Redis requer configuração manual do arquivo RDB"
     warning "Arquivo disponível em: $redis_backup_file"
+    
+    if [[ -n "$PITR_TIMESTAMP" ]]; then
+        log "Aplicando PITR para Redis até $PITR_TIMESTAMP..."
+        # Assumindo AOF em $EXTRACTED_DIR/aof
+        # Usar redis-check-aof para truncar até timestamp (requer parsing)
+        warning "PITR para Redis requer AOF e parsing customizado. Implementar lógica para truncar AOF até timestamp."
+    fi
     
     log "Restore do Redis preparado (requer reinicialização manual)"
 }
@@ -587,6 +604,10 @@ parse_arguments() {
                 ;;
             -t|--temp-dir)
                 TEMP_DIR="$2"
+                shift 2
+                ;;
+            --pitr)
+                PITR_TIMESTAMP="$2"
                 shift 2
                 ;;
             -h|--help)

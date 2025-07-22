@@ -38,7 +38,6 @@ from app.services.rom import (
 
 # Serviços de tarefas
 from app.services.task import (
-    TaskResultService,
     TaskService,
 )
 
@@ -67,7 +66,6 @@ __all__ = [
     "ROMVerificationService",
     # Task
     "TaskService",
-    "TaskResultService",
     # Processing
     "ImportService",
     "VerificationService",

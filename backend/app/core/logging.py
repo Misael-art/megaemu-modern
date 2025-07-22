@@ -87,16 +87,18 @@ def setup_logging() -> None:
         format=(
             "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
             "{level: <8} | "
-            "{extra[method]} {extra[url]} | "
+            "{extra[method]} {extra[path]} | "
             "Status: {extra[status_code]} | "
             "Duration: {extra[duration]}ms | "
             "IP: {extra[client_ip]} | "
-            "User-Agent: {extra[user_agent]}"
+            "User-Agent: {extra[user_agent]} | "
+            "User-ID: {extra[user_id]}"
         ),
         level="INFO",
         rotation="20 MB",
         retention="90 days",
         compression="zip",
+        serialize=True,  # Adicionar para logging estruturado em JSON
         filter=lambda record: "access" in record["extra"],
     )
     
@@ -165,38 +167,25 @@ def get_logger_with_context(**context: Any) -> Any:
 
 def log_request(
     method: str,
-    url: str,
+    path: str,  # Alterar de url para path
     status_code: int,
     duration: float,
     client_ip: str,
     user_agent: str,
     user_id: str = None
 ) -> None:
-    """Registra log de requisição HTTP.
-    
-    Args:
-        method: Método HTTP
-        url: URL da requisição
-        status_code: Código de status da resposta
-        duration: Duração da requisição em ms
-        client_ip: IP do cliente
-        user_agent: User-Agent do cliente
-        user_id: ID do usuário (se autenticado)
-    """
     context = {
         "access": True,
         "method": method,
-        "url": url,
+        "path": path,
         "status_code": status_code,
         "duration": round(duration, 2),
         "client_ip": client_ip,
-        "user_agent": user_agent[:100],  # Limitar tamanho
+        "user_agent": user_agent[:100],
     }
-    
     if user_id:
         context["user_id"] = user_id
-    
-    logger.bind(**context).info(f"{method} {url} - {status_code}")
+    logger.bind(**context).info(f"{method} {path} - {status_code}")
 
 
 def log_task(

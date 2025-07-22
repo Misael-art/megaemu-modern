@@ -4,9 +4,11 @@ Implementa pool de conexões otimizado, sessões assíncronas e utilitários
 para operações de banco de dados de alta performance.
 """
 
+import time
 from typing import AsyncGenerator, Optional
 
 from loguru import logger
+from prometheus_client import Histogram, Gauge
 from sqlalchemy import MetaData, event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -277,3 +279,31 @@ async def with_transaction(session: AsyncSession):
         ```
     """
     return TransactionManager(session)
+
+
+# Métricas Prometheus
+QUERY_DURATION = Histogram('database_query_duration_seconds', 'Duração das queries do banco de dados', ['operation'])
+POOL_SIZE = Gauge('database_pool_size', 'Tamanho atual do pool de conexões')
+POOL_CHECKED_IN = Gauge('database_pool_checked_in', 'Conexões checked in no pool')
+POOL_CHECKED_OUT = Gauge('database_pool_checked_out', 'Conexões checked out no pool')
+POOL_OVERFLOW = Gauge('database_pool_overflow', 'Overflow do pool de conexões')
+
+@event.listens_for(engine.sync_engine, 'before_execute')
+def before_execute(conn, clauseelement, multiparams, params):
+    conn.info['query_start_time'] = time.time()
+    return clauseelement, multiparams, params
+
+@event.listens_for(engine.sync_engine, 'after_execute')
+def after_execute(conn, clauseelement, multiparams, params, result):
+    duration = time.time() - conn.info.get('query_start_time', 0)
+    operation = str(clauseelement.__class__.__name__)
+    QUERY_DURATION.labels(operation).observe(duration)
+    return result
+
+
+async def update_pool_metrics(self):
+    status = await self.get_pool_status()
+    POOL_SIZE.set(status['size'])
+    POOL_CHECKED_IN.set(status['checked_in'])
+    POOL_CHECKED_OUT.set(status['checked_out'])
+    POOL_OVERFLOW.set(status['overflow'])

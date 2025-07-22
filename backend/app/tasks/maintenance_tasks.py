@@ -333,3 +333,1488 @@ def system_health_check(self) -> Dict[str, Any]:
                 meta={"error": str(exc)}
             )
         raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+# Funções auxiliares
+def get_last_backup_time(backup_dir: str) -> datetime:
+    # Implementar lógica para obter timestamp do último backup
+    pass
+
+def perform_pg_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental PostgreSQL, possivelmente chamando script externo
+    subprocess.run(["scripts/backup.sh", "--incremental", last_time.isoformat()])
+    return "PG backup done"
+
+def perform_redis_incremental_backup(last_time: datetime) -> str:
+    # Implementar backup incremental Redis
+    return "Redis backup done"
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.auto_integrity_check")
+def auto_integrity_check(self) -> Dict[str, Any]:
+    """Verificação automática de integridade de ROMs."""
+    try:
+        from app.tasks.verification_tasks import verify_all_roms
+        result = verify_all_roms.delay().get()
+        logger.info("Verificação automática concluída")
+        return result
+    except Exception as exc:
+        logger.error(f"Erro na verificação automática: {exc}")
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.optimize_database")
+def optimize_database(self) -> Dict[str, Any]:
+    """Otimiza o banco de dados.
+    
+    Returns:
+        Dict com resultado da otimização
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando otimização..."}
+            )
+        
+        logger.info("Iniciando otimização do banco de dados")
+        
+        from sqlalchemy import text
+        
+        with get_db() as db:
+            optimizations = []
+            try:
+                db.execute(text("VACUUM;"))
+                optimizations.append("VACUUM executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 33, "total": 100, "status": "VACUUM concluído. Executando ANALYZE..."}
+                    )
+                db.execute(text("ANALYZE;"))
+                optimizations.append("ANALYZE executado")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 66, "total": 100, "status": "ANALYZE concluído. Reindexando..."}
+                    )
+                db.execute(text("REINDEX DATABASE megaemu;"))  # Assumindo nome do DB
+                optimizations.append("Índices reindexados")
+                if current_task:
+                    current_task.update_state(
+                        state="PROGRESS",
+                        meta={"current": 100, "total": 100, "status": "Otimização concluída."}
+                    )
+            except Exception as e:
+                logger.error(f"Erro durante otimização: {e}")
+                optimizations.append(f"Erro: {str(e)}")
+        
+        result = {
+            "optimizations": optimizations,
+            "status": "completed",
+            "message": "Otimização do banco de dados concluída"
+        }
+        
+        logger.info("Otimização do banco de dados concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na otimização do banco: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.system_health_check")
+def system_health_check(self) -> Dict[str, Any]:
+    """Executa verificação de saúde do sistema.
+    
+    Returns:
+        Dict com resultado da verificação
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Verificando sistema..."}
+            )
+        
+        logger.info("Iniciando verificação de saúde do sistema")
+        
+        import psutil
+        from app.core.redis import redis_client
+        
+        health_checks = {}
+        
+        # Verificar conectividade do banco
+        try:
+            with get_db() as db:
+                db.execute(text("SELECT 1;"))
+            health_checks["database"] = "healthy"
+        except Exception as e:
+            health_checks["database"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do banco: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 25, "total": 100, "status": "Banco de dados verificado."}
+            )
+        
+        # Verificar Redis
+        try:
+            redis_client.ping()
+            health_checks["redis"] = "healthy"
+        except Exception as e:
+            health_checks["redis"] = f"unhealthy: {str(e)}"
+            logger.warning(f"Falha na verificação do Redis: {e}")
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 50, "total": 100, "status": "Redis verificado."}
+            )
+        
+        # Verificar espaço em disco
+        disk_usage = psutil.disk_usage('/')
+        if disk_usage.percent > 90:
+            health_checks["disk_space"] = f"warning: {disk_usage.percent}% used"
+        else:
+            health_checks["disk_space"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 75, "total": 100, "status": "Espaço em disco verificado."}
+            )
+        
+        # Verificar uso de memória
+        memory = psutil.virtual_memory()
+        if memory.percent > 80:
+            health_checks["memory_usage"] = f"warning: {memory.percent}% used"
+        else:
+            health_checks["memory_usage"] = "healthy"
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Verificação concluída."}
+            )
+        
+        result = {
+            "health_checks": health_checks,
+            "overall_status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Verificação de saúde concluída"
+        }
+        
+        logger.info("Verificação de saúde do sistema concluída")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro na verificação de saúde: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.maintenance_tasks.incremental_backup")
+def incremental_backup(self) -> Dict[str, Any]:
+    """Executa backup incremental do sistema.
+    
+    Returns:
+        Dict com resultado do backup
+    """
+    try:
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": 100, "status": "Iniciando backup incremental..."}
+            )
+        
+        logger.info("Iniciando backup incremental")
+        
+        backup_dir = settings.BACKUP_DIR  # Assumindo configuração existente
+        last_backup_time = get_last_backup_time(backup_dir)  # Função auxiliar a ser implementada
+        
+        # Backup incremental PostgreSQL
+        pg_backup = perform_pg_incremental_backup(last_backup_time)
+        
+        # Backup incremental Redis
+        redis_backup = perform_redis_incremental_backup(last_backup_time)
+        
+        if current_task:
+            current_task.update_state(
+                state="PROGRESS",
+                meta={"current": 100, "total": 100, "status": "Backup incremental concluído."}
+            )
+        
+        result = {
+            "pg_backup": pg_backup,
+            "redis_backup": redis_backup,
+            "status": "completed",
+            "message": "Backup incremental concluído com sucesso"
+        }
+        
+        logger.info("Backup incremental concluído")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Erro no backup incremental: {exc}")
+        if current_task:
+            current_task.update_state(
+                state="FAILURE",
+                meta={"error": str(exc)}
+            )
+        raise

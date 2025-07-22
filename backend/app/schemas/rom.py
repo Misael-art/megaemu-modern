@@ -4,13 +4,14 @@ Define estruturas de dados para validação e serialização
 de operações relacionadas a ROMs, arquivos e verificações.
 """
 
+import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import Field, field_validator, computed_field
+from pydantic import Field, field_validator, computed_field, model_validator
 
 from app.schemas.base import BaseEntitySchema, BaseSchema, FilterParams, PaginationParams, SortParams
 
@@ -223,6 +224,27 @@ class ROMCreate(ROMBase):
         default=False,
         description="Se deve extrair automaticamente arquivos comprimidos"
     )
+
+    @model_validator(mode='after')
+    def check_required_hashes(self) -> 'ROMCreate':
+        if not (self.crc32 or self.md5 or self.sha1 or self.sha256):
+            raise ValueError('Pelo menos um hash deve ser fornecido para verificação')
+        return self
+
+    @field_validator('file_size')
+    @classmethod
+    def validate_size(cls, v: int) -> int:
+        if v > 10 * 1024 * 1024 * 1024:  # 10GB max
+            raise ValueError('Tamanho do arquivo excede o limite de 10GB')
+        return v
+
+    @field_validator('filename')
+    @classmethod
+    def validate_filename(cls, v: str) -> str:
+        invalid_chars = r'[\/:*?"<>|]'
+        if re.search(invalid_chars, v):
+            raise ValueError('Nome do arquivo contém caracteres inválidos')
+        return v
 
 
 class ROMUpdate(BaseSchema):

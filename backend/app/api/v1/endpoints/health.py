@@ -219,3 +219,25 @@ async def metrics():
 # Armazena tempo de início para cálculo de uptime
 if not hasattr(metrics, "_start_time"):
     metrics._start_time = time.time()
+
+
+@router.get("/connections", response_model=Dict[str, Any])
+async def connections_health_check():
+    checks = {}
+    try:
+        db_healthy = await db_manager.health_check()
+        checks["database"] = {
+            "status": "healthy" if db_healthy else "unhealthy",
+            "details": await db_manager.get_pool_status() if db_healthy else None
+        }
+    except Exception as e:
+        checks["database"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+    try:
+        await redis_manager.ping()
+        checks["redis"] = {"status": "healthy"}
+    except Exception as e:
+        checks["redis"] = {"status": "unhealthy", "error": str(e)}
+    return checks
